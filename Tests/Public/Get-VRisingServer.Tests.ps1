@@ -1,10 +1,15 @@
 BeforeAll {
     . $PSScriptRoot\..\Helpers.ps1
     $module_path = Get-DUTModulePath
+    Import-Module $module_path -Force
 }
 
-Describe 'When one server exists' {
+Describe 'When server exists' {
     It 'returns the server object' {
-        Write-Host 'Foo'
+        $server_data = @{
+            UpdateOnStartup = $True
+        }
+        $server = Get-VRisingServer -VRisingServerData $server_data
+        $server | Should -Not -BeNullOrEmpty -ErrorAction Stop
     }
 }
