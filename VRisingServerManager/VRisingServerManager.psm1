@@ -19,5 +19,3 @@ foreach ($function_library in $private:function_libraries) {
         Write-Debug "Loaded function library file: $function_library_script_file_path"
     }
 }
-
-asdfasdf
