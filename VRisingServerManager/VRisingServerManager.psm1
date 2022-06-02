@@ -1,6 +1,9 @@
+# module variables
+$DefaultServerRepositoryDirPath = "$Env:ProgramData\edgetools\VRisingServerManager\Servers"
+
 # list of function libraries
 $private:function_libraries = @(
-    "$PSScriptRoot\Private",
+    "$PSScriptRoot\Domain",
     "$PSScriptRoot\Public"
 )
 

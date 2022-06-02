@@ -1,20 +1,25 @@
-# this should be able to use an in-memory version of the servers
-# add a parameter with a default value that specifies the source
-# this way when running in unit tests you can override it
-
-# this function should return an object with all the server details
-# under the hood it will call Read-VRisingServerConfigFile if it isn't passed existing data for it
+using module ..\Class\ServerRepositoryFileAdapter.psm1
+using module ..\Class\ServiceProviderWindowsAdapter.psm1
 
 function Get-VRisingServer {
     [CmdletBinding()]
     param (
-        [Parameter()]
+        [Parameter(Mandatory=$True)]
+        [ValidateNotNullOrEmpty()]
         [string]
         $Name,
 
         [Parameter()]
-        [hashtable]
-        $VRisingServerData = $null
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $RepositoryDirPath = $script:DefaultServerRepositoryDirPath
     )
 
+    $FileServerRepository = [ServerRepositoryFileAdapter]::New($RepositoryDirPath)
+    $WindowsServiceProvider = [ServiceProviderWindowsAdapter]::New()
+
+    return GetServer `
+        -Name $Name `
+        -ServerRepository $FileServerRepository `
+        -ServiceProvider $WindowsServiceProvider
 }
