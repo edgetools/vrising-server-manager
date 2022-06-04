@@ -1,9 +1,14 @@
-# module variables
+using module .\Class\VRisingServerRepository.psm1
+using module .\Class\VRisingServer.psm1
+
+# module parameters
+$ActiveServerConfigDirPath = "$Env:ProgramData\edgetools\VRisingServerManager\Servers"
 $DefaultServerRepositoryDirPath = "$Env:ProgramData\edgetools\VRisingServerManager\Servers"
+[string] $ActiveServerShortName
 
 # list of function libraries
 $private:function_libraries = @(
-    "$PSScriptRoot\Domain",
+    "$PSScriptRoot\Private",
     "$PSScriptRoot\Public"
 )
 
@@ -24,3 +29,9 @@ foreach ($private:function_library in $private:function_libraries) {
         Write-Debug "Loaded function library file: $private:function_library_script_file_path"
     }
 }
+
+# create default VRisingServerRepository
+$DefaultServerRepository = [VRisingServerRepository]::New($DefaultServerRepositoryDirPath)
+[VRisingServerRepository] $ActiveServerRepository = $DefaultServerRepository
+
+[VRisingServer] $ActiveServer

@@ -1,25 +1,45 @@
-using module ..\Class\ServerRepositoryFileAdapter.psm1
-using module ..\Class\ServiceProviderWindowsAdapter.psm1
+using module ..\Class\VRisingServer.psm1
+using module ..\Class\VRisingServerRepository.psm1
 
 function Get-VRisingServer {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory=$True)]
-        [ValidateNotNullOrEmpty()]
-        [string]
-        $Name,
+        [Parameter(Position=0)]
+        [string] $Name,
 
         [Parameter()]
-        [ValidateNotNullOrEmpty()]
-        [string]
-        $RepositoryDirPath = $script:DefaultServerRepositoryDirPath
+        [VRisingServerRepository] $ServerRepository
     )
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        throw [System.ArgumentNullException]::New("Name")
+    }
+    # get default repository if unspecified
+    if ($null -eq $ServerRepository) {
+        $ServerRepository = Get-VRisingServerRepository
+    }
+    # throw if still null
+    if ($null -eq $ServerRepository) {
+        throw [System.ArgumentNullException]::New("ServerRepository")
+    }
 
-    $FileServerRepository = [ServerRepositoryFileAdapter]::New($RepositoryDirPath)
-    $WindowsServiceProvider = [ServiceProviderWindowsAdapter]::New()
+    # $ServerConfigFilePath = Join-Path -Path $ServerConfigDirPath -ChildPath "$ShortName.json"
 
-    return GetServer `
-        -Name $Name `
-        -ServerRepository $FileServerRepository `
-        -ServiceProvider $WindowsServiceProvider
+    # try {
+    #     $ServerConfigFile = Get-Content -LiteralPath $ServerConfigFilePath -ErrorAction Stop
+    # } catch [System.Management.Automation.ItemNotFoundException] {
+    #     $_.ErrorDetails = "Server '$ShortName' not found"
+    #     throw $_
+    # }
+
+    # $ServerConfig = $ServerConfigFile | ConvertFrom-Json -ErrorAction Stop
+
+    # $Server = [VRisingServer]::New()
+    # $Server.ShortName = $ServerConfig.ShortName
+    # $Server.UpdateOnStartup = $ServerConfig.UpdateOnStartup
+
+    $server = $ServerRepository.Load($Name)
+
+    return $server
 }
+
+Register-ArgumentCompleter -CommandName Get-VRisingServer -ParameterName Name -ScriptBlock $function:ServerNameArgumentCompleter
