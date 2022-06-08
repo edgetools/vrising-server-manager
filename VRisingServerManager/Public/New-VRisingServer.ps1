@@ -24,11 +24,11 @@ function New-VRisingServer {
 
     # # ensure server config dir exists
     # if (-Not (Test-Path -LiteralPath $ServerConfigDirPath -PathType Container)) {
-    #     $ServerConfigDir = New-Item -Path $ServerConfigDirPath -ItemType Directory -ErrorAction Stop
+    #     $ServerConfigDir = New-Item -Path $ServerConfigDirPath -ItemType Directory
     # }
 
     # create the service
-    Install-VRisingServerService -ServiceName $ServiceName -ErrorAction Stop
+    Install-VRisingServerService -ServiceName $ServiceName
 
     # save the config file
     $ServerConfigFile = @{
@@ -36,5 +36,5 @@ function New-VRisingServer {
         UpdateOnStartup = $UpdateOnStartup
         ServiceName = $ServiceName
     }
-    $ServerConfigFile | ConvertTo-Json -ErrorAction Stop | Out-File -LiteralPath $ServerConfigFilePath
+    $ServerConfigFile | ConvertTo-Json | Out-File -LiteralPath $ServerConfigFilePath
 }

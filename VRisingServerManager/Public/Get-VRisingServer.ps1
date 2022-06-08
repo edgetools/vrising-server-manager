@@ -25,13 +25,13 @@ function Get-VRisingServer {
     # $ServerConfigFilePath = Join-Path -Path $ServerConfigDirPath -ChildPath "$ShortName.json"
 
     # try {
-    #     $ServerConfigFile = Get-Content -LiteralPath $ServerConfigFilePath -ErrorAction Stop
+    #     $ServerConfigFile = Get-Content -LiteralPath $ServerConfigFilePath
     # } catch [System.Management.Automation.ItemNotFoundException] {
     #     $_.ErrorDetails = "Server '$ShortName' not found"
     #     throw $_
     # }
 
-    # $ServerConfig = $ServerConfigFile | ConvertFrom-Json -ErrorAction Stop
+    # $ServerConfig = $ServerConfigFile | ConvertFrom-Json
 
     # $Server = [VRisingServer]::New()
     # $Server.ShortName = $ServerConfig.ShortName

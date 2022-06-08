@@ -3,7 +3,7 @@ using module .\ServiceProviderPort.psm1
 class ServiceProviderWindowsAdapter : ServiceProviderPort {
     [bool] IsInstalled([string]$Name) {
         try {
-            Get-Service -Name $Name -ErrorAction Stop
+            Get-Service -Name $Name
             return $True
         }
         catch [Microsoft.PowerShell.Commands.ServiceCommandException] {
@@ -15,7 +15,7 @@ class ServiceProviderWindowsAdapter : ServiceProviderPort {
     }
 
     [void] Install([string]$Name) {
-        New-Service -Name $Name -BinaryPathName '"powershell.exe -Command { while ($True) { Start-Sleep -Seconds 1; } }"' -ErrorAction Stop
+        New-Service -Name $Name -BinaryPathName '"powershell.exe -Command { while ($True) { Start-Sleep -Seconds 1; } }"'
     }
 
     [void] Uninstall([string]$Name) {

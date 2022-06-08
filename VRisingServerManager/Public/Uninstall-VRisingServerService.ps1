@@ -23,10 +23,10 @@ function Uninstall-VRisingServerService {
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByServerName') {
-            $Server = Get-VRisingServer -ShortName $ServerName -ErrorAction Stop
+            $Server = Get-VRisingServer -ShortName $ServerName
             $ServiceName = $Server.ServiceName
         }
-        $Service = Get-WmiObject -Class Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop
+        $Service = Get-WmiObject -Class Win32_Service -Filter "Name='$ServiceName'"
         if ($null -eq $Service) {
             throw "Service '$ServiceName' not found"
         }

@@ -23,7 +23,7 @@ function Install-VRisingServerService {
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByServerName') {
-            $Server = Get-VRisingServer -ShortName $ServerName -ErrorAction Stop
+            $Server = Get-VRisingServer -ShortName $ServerName
             $ServiceName = $Server.ServiceName
         }
         try {
@@ -32,7 +32,6 @@ function Install-VRisingServerService {
                 New-Service `
                     -Name $ServiceName `
                     -BinaryPathName "`"$PowerShellPath`" -NonInteractive -NoProfile -ExecutionPolicy Bypass" `
-                    -ErrorAction Stop `
                     | Out-Null
             }
         } catch [Microsoft.PowerShell.Commands.ServiceCommandException] {
