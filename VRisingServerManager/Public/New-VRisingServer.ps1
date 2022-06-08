@@ -1,3 +1,6 @@
+using module ..\Class\VRisingServerRepository.psm1
+using module ..\Class\VRisingServer.psm1
+
 function New-VRisingServer {
     [CmdletBinding()]
     param (
@@ -12,29 +15,25 @@ function New-VRisingServer {
         [VRisingServerRepository] $ServerRepository
     )
 
-    # check for existing config file and service
-    $ServerConfigFilePath = Join-Path -Path $ServerConfigDirPath -ChildPath "$ShortName.json"
-    if (Test-Path -LiteralPath $ServerConfigFilePath -PathType Leaf) {
+    # get default repository if unspecified
+    if ($null -eq $ServerRepository) {
+        $ServerRepository = Get-VRisingServerRepository
+    }
+    # throw if still null
+    if ($null -eq $ServerRepository) {
+        throw [System.ArgumentNullException]::New("ServerRepository")
+    }
+
+    # check for existing server in repository
+    if ($ServerRepository.Contains($ShortName)) {
         throw "Server '$ShortName' already exists"
     }
-    $ServiceName = "V Rising Server ($ShortName)"
-    if (ServiceIsInstalled $ServiceName) {
-        throw "Service '$ServiceName' already exists"
-    }
 
-    # # ensure server config dir exists
-    # if (-Not (Test-Path -LiteralPath $ServerConfigDirPath -PathType Container)) {
-    #     $ServerConfigDir = New-Item -Path $ServerConfigDirPath -ItemType Directory
-    # }
+    # create the new server
+    $server = [VRisingServer]::New()
+    $server.Name = $ShortName
+    $server.UpdateOnStartup = $UpdateOnStartup
 
-    # create the service
-    Install-VRisingServerService -ServiceName $ServiceName
-
-    # save the config file
-    $ServerConfigFile = @{
-        ShortName = $ShortName
-        UpdateOnStartup = $UpdateOnStartup
-        ServiceName = $ServiceName
-    }
-    $ServerConfigFile | ConvertTo-Json | Out-File -LiteralPath $ServerConfigFilePath
+    # save the new server
+    $ServerRepository.Save($server)
 }

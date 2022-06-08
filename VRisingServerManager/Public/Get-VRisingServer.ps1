@@ -4,15 +4,13 @@ using module ..\Class\VRisingServerRepository.psm1
 function Get-VRisingServer {
     [CmdletBinding()]
     param (
-        [Parameter(Position=0)]
-        [string] $Name,
+        [Parameter(Position=0, ValueFromPipeline=$true)]
+        [string[]] $Name,
 
         [Parameter()]
         [VRisingServerRepository] $ServerRepository
     )
-    if ([string]::IsNullOrWhiteSpace($Name)) {
-        throw [System.ArgumentNullException]::New("Name")
-    }
+
     # get default repository if unspecified
     if ($null -eq $ServerRepository) {
         $ServerRepository = Get-VRisingServerRepository
@@ -22,24 +20,11 @@ function Get-VRisingServer {
         throw [System.ArgumentNullException]::New("ServerRepository")
     }
 
-    # $ServerConfigFilePath = Join-Path -Path $ServerConfigDirPath -ChildPath "$ShortName.json"
+    # TODO: default server can be a list of servers (Get-VRisingServer pub* | Set-VRisingActiveServers)
+    [string[]] $serverNames = $ServerRepository.GetNames($Name)
+    [VRisingServer[]] $servers = $ServerRepository.Load($serverNames)
 
-    # try {
-    #     $ServerConfigFile = Get-Content -LiteralPath $ServerConfigFilePath
-    # } catch [System.Management.Automation.ItemNotFoundException] {
-    #     $_.ErrorDetails = "Server '$ShortName' not found"
-    #     throw $_
-    # }
-
-    # $ServerConfig = $ServerConfigFile | ConvertFrom-Json
-
-    # $Server = [VRisingServer]::New()
-    # $Server.ShortName = $ServerConfig.ShortName
-    # $Server.UpdateOnStartup = $ServerConfig.UpdateOnStartup
-
-    $server = $ServerRepository.Load($Name)
-
-    return $server
+    return $servers
 }
 
 Register-ArgumentCompleter -CommandName Get-VRisingServer -ParameterName Name -ScriptBlock $function:ServerNameArgumentCompleter

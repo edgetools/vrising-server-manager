@@ -7,15 +7,16 @@ function ServerNameArgumentCompleter {
         [System.Management.Automation.Language.CommandAst] $CommandAst,
         [System.Collections.IDictionary] $FakeBoundParameters
     )
-    $serverRepository = Get-VRisingServerRepository
+    if ($null -ne $FakeBoundParameters['ServerRepository']) {
+        $serverRepository = $FakeBoundParameters['ServerRepository']
+    } else {
+        $serverRepository = Get-VRisingServerRepository
+    }
     if ($null -eq $serverRepository) {
         return
     }
-    if (-Not $serverRepository.Exists()) {
-        return
-    }
-    $serverNames = $serverRepository.GetNames($WordToComplete)
-    $serverNames | ForEach-Object {
-        [System.Management.Automation.CompletionResult]::New($_)
+    $serverNames = $serverRepository.GetNames("$WordToComplete*")
+    foreach ($serverName in $serverNames) {
+        [System.Management.Automation.CompletionResult]::New($serverName)
     }
 }

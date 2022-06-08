@@ -1,3 +1,3 @@
 function Get-VRisingServerRepository {
-    return $script:ActiveServerRepository
+    return $script:CurrentServerRepository
 }
