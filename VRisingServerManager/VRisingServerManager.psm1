@@ -1,11 +1,9 @@
 using module .\Class\VRisingServerRepository.psm1
 using module .\Class\VRisingServer.psm1
+using module .\Class\VRisingServerScheduler.psm1
 
 # module parameters
 $ErrorActionPreference = 'Stop'
-$ActiveServerConfigDirPath = "$Env:ProgramData\edgetools\VRisingServerManager\Servers"
-$DefaultServerRepositoryDirPath = "$Env:ProgramData\edgetools\VRisingServerManager\Servers"
-[string] $ActiveServerShortName
 
 # list of function libraries
 $private:functionLibraries = @(
@@ -31,8 +29,15 @@ foreach ($private:functionLibrary in $private:functionLibraries) {
     }
 }
 
+# custom formatters
+Update-FormatData -AppendPath "$PSScriptRoot\Class\VRisingServer.Format.ps1xml"
+
 # create default VRisingServerRepository
+$DefaultServerRepositoryDirPath = "$Env:ProgramData\edgetools\VRisingServerManager\Servers"
 $DefaultServerRepository = [VRisingServerRepository]::New($DefaultServerRepositoryDirPath)
 [VRisingServerRepository] $CurrentServerRepository = $DefaultServerRepository
 
 [VRisingServer[]] $CurrentServers
+
+# create the VRisingServerScheduler
+$ServerScheduler = [VRisingServerScheduler]::New()
