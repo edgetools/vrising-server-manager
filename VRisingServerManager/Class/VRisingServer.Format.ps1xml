@@ -7,22 +7,29 @@
         <TypeName>VRisingServer</TypeName>
       </ViewSelectedBy>
       <TableControl>
+        <AutoSize/>
         <TableHeaders>
           <TableColumnHeader>
             <Width>8</Width>
           </TableColumnHeader>
-          <TableColumnHeader>
-            <Width>18</Width>
-          </TableColumnHeader>
+          <TableColumnHeader />
+          <TableColumnHeader />
+          <TableColumnHeader />
         </TableHeaders>
         <TableRowEntries>
           <TableRowEntry>
             <TableColumnItems>
               <TableColumnItem>
-                <PropertyName>Status</PropertyName>
+                <PropertyName>Running</PropertyName>
               </TableColumnItem>
               <TableColumnItem>
-                <PropertyName>Name</PropertyName>
+                <PropertyName>Uptime</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>ShortName</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>DisplayName</PropertyName>
               </TableColumnItem>
             </TableColumnItems>
           </TableRowEntry>
