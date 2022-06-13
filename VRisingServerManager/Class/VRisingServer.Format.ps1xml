@@ -10,8 +10,9 @@
         <AutoSize/>
         <TableHeaders>
           <TableColumnHeader>
-            <Width>8</Width>
+            <Width>12</Width>
           </TableColumnHeader>
+          <TableColumnHeader />
           <TableColumnHeader />
           <TableColumnHeader />
           <TableColumnHeader />
@@ -20,10 +21,13 @@
           <TableRowEntry>
             <TableColumnItems>
               <TableColumnItem>
-                <PropertyName>Running</PropertyName>
+                <PropertyName>Status</PropertyName>
               </TableColumnItem>
               <TableColumnItem>
                 <PropertyName>Uptime</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>LastUpdate</PropertyName>
               </TableColumnItem>
               <TableColumnItem>
                 <PropertyName>ShortName</PropertyName>

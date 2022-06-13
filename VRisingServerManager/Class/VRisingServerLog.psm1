@@ -2,7 +2,7 @@ class VRisingServerLog {
     static [bool] $ShowDateTime = $false
 
     static [void] Info([PSCustomObject[]]$toLog) {
-        $toLog | ForEach-Object { Write-Information $([VRisingServerLog]::WithPrefix($_)) }
+        $toLog | ForEach-Object { Write-Information $([VRisingServerLog]::WithPrefix($_)) -InformationAction 'Continue' }
     }
 
     static [void] Verbose([PSCustomObject[]]$toLog) {
@@ -15,6 +15,10 @@ class VRisingServerLog {
 
     static [void] Warning([PSCustomObject[]]$toLog) {
         $toLog | ForEach-Object { Write-Warning $([VRisingServerLog]::WithPrefix($_)) }
+    }
+
+    static [void] FakeError([PSCustomObject[]]$toLog) {
+        $toLog | ForEach-Object { Write-Host -ForegroundColor Red $([VRisingServerLog]::WithPrefix($_)) }
     }
 
     static [void] Error([PSCustomObject[]]$toLog) {

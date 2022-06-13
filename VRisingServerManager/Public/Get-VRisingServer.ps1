@@ -7,7 +7,6 @@ function Get-VRisingServer {
         [string[]] $ShortName
     )
 
-    # TODO: default server can be a list of servers (Get-VRisingServer pub* | Set-VRisingActiveServers)
     return [VRisingServer]::GetServers($ShortName)
 }
 

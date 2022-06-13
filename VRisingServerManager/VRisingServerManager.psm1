@@ -27,4 +27,6 @@ foreach ($private:functionLibrary in $private:functionLibraries) {
     }
 }
 
+ExportAliases
+
 [VRisingServer]::LoadServers()
