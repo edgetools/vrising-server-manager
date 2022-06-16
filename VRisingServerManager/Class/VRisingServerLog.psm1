@@ -17,10 +17,6 @@ class VRisingServerLog {
         $toLog | ForEach-Object { Write-Warning $([VRisingServerLog]::WithPrefix($_)) }
     }
 
-    static [void] FakeError([PSCustomObject[]]$toLog) {
-        $toLog | ForEach-Object { Write-Host -ForegroundColor Red $([VRisingServerLog]::WithPrefix($_)) }
-    }
-
     static [void] Error([PSCustomObject[]]$toLog) {
         $toLog | ForEach-Object { Write-Error $([VRisingServerLog]::WithPrefix($_)) }
     }

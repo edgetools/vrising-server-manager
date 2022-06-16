@@ -1,24 +1,27 @@
 using module ..\Class\VRisingServer.psm1
 
 function Read-VRisingServerLog {
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName='ByShortName')]
     param(
+        [Parameter(Position=1, ParameterSetName='ByShortName')]
+        [Parameter(Position=1, ParameterSetName='ByServer')]
+        [VRisingServerLogType] $LogType = [VRisingServerLogType]::File,
+
         [Parameter(Position=0, ParameterSetName='ByShortName')]
         [string[]] $ShortName,
 
-        [Parameter(ParameterSetName='ByServer', ValueFromPipeline=$true)]
+        [Parameter(Position=0, ParameterSetName='ByServer', ValueFromPipeline=$true)]
         [VRisingServer] $Server,
 
-        [Parameter(Position=1, ParameterSetName='ByShortName')]
-        [Parameter(ParameterSetName='ByServer')]
-        [VRisingServerLogType] $LogType = [VRisingServerLogType]::File
+        [Parameter()]
+        [int]$Last
     )
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
-            [VRisingServer]::ReadServerLogType($ShortName, $LogType)
+            [VRisingServer]::ReadServerLogType($ShortName, $LogType, $Last)
         } else {
-            $Server.ReadLogType($LogType)
+            $Server.ReadLogType($LogType, $Last)
         }
     }
 }

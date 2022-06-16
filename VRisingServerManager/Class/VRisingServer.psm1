@@ -8,8 +8,8 @@ enum VRisingServerLogType {
     Error
     Update
     UpdateError
-    Orchestrator
-    OrchestratorError
+    Command
+    CommandError
 }
 
 class VRisingServer {
@@ -17,7 +17,6 @@ class VRisingServer {
     static hidden [hashtable] $_config
     static hidden [string] $_configFilePath
     static hidden [string] $_serverFileDir
-    static hidden [hashtable] $_servers
     static hidden [string] $SAVES_DIR_NAME = 'Saves'
     static hidden [string] $SETTINGS_DIR_NAME = 'Settings'
     static hidden [string] $DATA_DIR_NAME = 'Data'
@@ -31,7 +30,7 @@ class VRisingServer {
             -TypeName "VRisingServer" `
             -MemberName ShortName `
             -MemberType ScriptProperty `
-            -Value { return $this._shortName } `
+            -Value { return $this.ReadProperty('ShortName') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -47,6 +46,18 @@ class VRisingServer {
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
+            -MemberName Command `
+            -MemberType ScriptProperty `
+            -Value { return $this.ReadProperty('CommandType') } `
+            -Force
+        Update-TypeData `
+            -TypeName "VRisingServer" `
+            -MemberName CommandStatus `
+            -MemberType ScriptProperty `
+            -Value { return $this.GetCommandStatus() } `
+            -Force
+        Update-TypeData `
+            -TypeName "VRisingServer" `
             -MemberName LastUpdate `
             -MemberType ScriptProperty `
             -Value { return $this.GetUpdateStatus() } `
@@ -59,27 +70,27 @@ class VRisingServer {
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
-            -MemberName AutoStart `
+            -MemberName Enabled `
             -MemberType ScriptProperty `
-            -Value { return $this._autoStart } `
+            -Value { return $this.ReadProperty('Enabled') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName UpdateOnStartup `
             -MemberType ScriptProperty `
-            -Value { return $this._updateOnStartup } `
+            -Value { return $this.ReadProperty('UpdateOnStartup') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName InstallDir `
             -MemberType ScriptProperty `
-            -Value { return $this.GetInstallDirPath() } `
+            -Value { return $this.ReadProperty('InstallDir') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName DataDir `
             -MemberType ScriptProperty `
-            -Value { return $this.GetDataDirPath() } `
+            -Value { return $this.ReadProperty('DataDir') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -97,13 +108,13 @@ class VRisingServer {
             -TypeName "VRisingServer" `
             -MemberName LogDir `
             -MemberType ScriptProperty `
-            -Value { return $this.GetLogDirPath() } `
+            -Value { return $this.ReadProperty('LogDir') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName LogFile `
             -MemberType ScriptProperty `
-            -Value { return $this.GetLogFilePath() } `
+            -Value { return $this.ReadProperty('LogFile') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -125,7 +136,6 @@ class VRisingServer {
             DefaultServerDir = 'D:\VRisingServers'
             SteamCmdPath = $null
         }
-        [VRisingServer]::_servers = @{}
         [VRisingServer]::LoadConfigFile()
         if (($null -eq [VRisingServer]::_config['SteamCmdPath']) -or ($true -eq ([string]::IsNullOrWhiteSpace([VRisingServer]::_config['SteamCmdPath'])))) {
             [VRisingServerLog]::Warning("SteamCmdPath is unset -- resolve using: Set-VRisingServerManagerConfigOption SteamCmdPath 'path/to/steamcmd.exe'")
@@ -138,8 +148,7 @@ class VRisingServer {
 
     static hidden [void] SetConfigValue([string]$configKey, [PSObject]$configValue) {
         if ($false -eq ($configKey -in [VRisingServer]::_config.Keys)) {
-            [VRisingServerLog]::Error("config key '$configKey' unrecognized -- valid keys: $([VRisingServer]::_config.Keys)")
-            return
+            throw "Config key '$configKey' unrecognized -- valid keys: $([VRisingServer]::_config.Keys)"
         }
         [VRisingServer]::_config[$configKey] = $configValue
         [VRisingServer]::SaveConfigFile()
@@ -177,31 +186,38 @@ class VRisingServer {
         [VRisingServerLog]::Verbose("Saved main config file")
     }
 
-    static hidden [VRisingServer[]] GetServers([string[]]$searchKeys) {
-        $servers = [System.Collections.ArrayList]::New()
+    static hidden [VRisingServer[]] FindServers([string[]]$searchKeys) {
+        $servers = [VRisingServer]::LoadServers()
+        $foundServers = [System.Collections.ArrayList]::New()
         if (($null -eq $searchKeys) -or ($searchKeys.Count -eq 0)) {
             $searchKeys = @('*')
         }
         foreach ($searchKey in $searchKeys) {
-            $serversForKey = [VRisingServer]::GetServers($searchKey)
+            $serversForKey = [VRisingServer]::FindServers($searchKey, $servers)
             if ($null -ne $serversForKey) {
-                $servers.AddRange($serversForKey)
+                $foundServers.AddRange($serversForKey)
             }
         }
-        return $servers.ToArray([VRisingServer])
+        return $foundServers.ToArray([VRisingServer])
     }
 
-    static hidden [VRisingServer[]] GetServers([string]$searchKey) {
+    static hidden [VRisingServer] GetServer([string]$shortName) {
+        return [VRisingServer]::LoadServers() | Where-Object { $_.ReadProperty('ShortName') -eq $shortName }
+    }
+
+    static hidden [VRisingServer[]] FindServers([string]$searchKey, [VRisingServer[]]$servers) {
         if ([string]::IsNullOrWhiteSpace($searchKey)) {
             $searchKey = '*'
         }
-        $servers = [VRisingServer]::_servers.Values |
-                        Where-Object { $_._shortName -like $searchKey }
-        return $servers
+        return $servers | Where-Object { $_.ReadProperty('ShortName') -like $searchKey }
+    }
+
+    static hidden [VRisingServer[]] FindServers([string]$searchKey) {
+        return [VRisingServer]::FindServers($searchKey, [VRisingServer]::LoadServers())
     }
 
     static hidden [string[]] GetShortNames() {
-        return [VRisingServer]::_servers.Keys
+        return [VRisingServer]::LoadServers() | ForEach-Object { $_.ReadProperty('ShortName') }
     }
 
     static hidden [bool] ServerFileDirExists() {
@@ -218,280 +234,178 @@ class VRisingServer {
             -File
     }
 
-    static hidden [System.Diagnostics.Process] GetProcessById([int]$processId) {
-        try {
-            return Get-Process -Id $processId
-        }
-        catch [Microsoft.PowerShell.Commands.ProcessCommandException] {
-            if ('NoProcessFoundForGivenId' -eq ($_.FullyQualifiedErrorid -split ',')[0]) {
-                return $null
-            } else {
-                throw $_
-            }
-        }
-    }
-
-    static hidden [void] LoadServers() {
+    static hidden [VRisingServer[]] LoadServers() {
         # check if servers dir exists
         if ($false -eq ([VRisingServer]::ServerFileDirExists())) {
-            return
+            return $null
         }
+        $servers = [System.Collections.ArrayList]::New()
         $serverFiles = [VRisingServer]::GetServerFiles()
         foreach ($serverFile in $serverFiles) {
-            [VRisingServer]::LoadServer($serverFile.FullName)
+            $server = [VRisingServer]::LoadServer($serverFile.FullName)
+            if ($null -ne $server) {
+                $servers.Add($server)
+            }
         }
+        return $servers.ToArray([VRisingServer])
     }
 
-    static hidden [void] LoadServer([string]$filePath) {
+    static hidden [VRisingServer] LoadServer([string]$filePath) {
         $serverFileContents = Get-Content -LiteralPath $filePath | ConvertFrom-Json
         if (($false -eq ($serverFileContents.PSObject.Properties.Name -contains 'ShortName')) -or
                 ([string]::IsNullOrWhiteSpace($serverFileContents.ShortName))) {
-            [VRisingServerLog]::Error("failing loading server file at $filePath -- ShortName is missing or empty")
-            return
+            throw "Failed loading server file at $filePath -- ShortName is missing or empty"
         }
-        if ($null -ne [VRisingServer]::_servers[$serverFileContents.ShortName]) {
-            $server = [VRisingServer]::_servers[$serverFileContents.ShortName]
-        } else {
-            $server = [VRisingServer]::New($filePath)
-        }
-        $shouldSave = $false
-        $server._shortName = $serverFileContents.ShortName
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'UpdateOnStartup')) {
-            $server._updateOnStartup = $serverFileContents.UpdateOnStartup
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'AutoStart')) {
-            $server._autoStart = $serverFileContents.AutoStart
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'DataDir')) {
-            $server._dataDir = $serverFileContents.DataDir
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'InstallDir')) {
-            $server._installDir = $serverFileContents.InstallDir
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'LogDir')) {
-            $server._logDir = $serverFileContents.LogDir
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'LogFile')) {
-            $server._logFile = $serverFileContents.LogFile
-        }
-        # server process
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'LastExitCode')) {
-            $server._lastExitCode = $serverFileContents.LastExitCode
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'ProcessId')) {
-            if ($serverFileContents.ProcessId -gt 0) {
-                $server._process = [VRisingServer]::GetProcessById($serverFileContents.ProcessId)
-                if ($null -eq $server._process) {
-                    # save to ensure the old process id gets reset
-                    $shouldSave = $true
-                } else {
-                    $server._lastExitCode = 0
-                    $server.RegisterStopEvent()
-                }
-            }
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'StdoutLogFile')) {
-            $server._stdoutLogFile = $serverFileContents.StdoutLogFile
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'StderrLogFile')) {
-            $server._stderrLogFile = $serverFileContents.StderrLogFile
-        }
-        # update process
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'UpdateLastExitCode')) {
-            $server._updateLastExitCode = $serverFileContents.UpdateLastExitCode
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'UpdateProcessId')) {
-            if ($serverFileContents.UpdateProcessId -gt 0) {
-                $server._updateProcess = [VRisingServer]::GetProcessById($serverFileContents.UpdateProcessId)
-                if ($null -eq $server._updateProcess) {
-                    # save to ensure the old process id gets reset
-                    $shouldSave = $true
-                } else {
-                    $server._updateLastExitCode = 0
-                    $server.RegisterUpdateStopEvent()
-                }
-            }
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'UpdateStdoutLogFile')) {
-            $server._updateStdoutLogFile = $serverFileContents.UpdateStdoutLogFile
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'UpdateStderrLogFile')) {
-            $server._updateStderrLogFile = $serverFileContents.UpdateStderrLogFile
-        }
-        # orchestration process
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'OrchestratorLastExitCode')) {
-            $server._orchestratorLastExitCode = $serverFileContents.OrchestratorLastExitCode
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'OrchestratorType')) {
-            $server._orchestratorType = $serverFileContents.OrchestratorType
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'OrchestratorProcessId')) {
-            if ($serverFileContents.OrchestratorProcessId -gt 0) {
-                $server._orchestratorProcess = [VRisingServer]::GetProcessById($serverFileContents.OrchestratorProcessId)
-                if ($null -eq $server._orchestratorProcess) {
-                    # save to ensure the old process id gets reset
-                    $shouldSave = $true
-                } else {
-                    $server._orchestratorLastExitCode = 0
-                    $server._orchestratorType = $null
-                    $server.RegisterOrchestratorStopEvent()
-                }
-            }
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'OrchestratorStdoutLogFile')) {
-            $server._orchestratorStdoutLogFile = $serverFileContents.OrchestratorStdoutLogFile
-        }
-        if ($true -eq ($serverFileContents.PSObject.Properties.Name -contains 'OrchestratorStderrLogFile')) {
-            $server._orchestratorStderrLogFile = $serverFileContents.OrchestratorStderrLogFile
-        }
-        # 
-        if ($true -eq $shouldSave) {
-            [VRisingServer]::SaveServer($server)
-        }
-        [VRisingServer]::_servers[$server._shortName] = $server
-        [VRisingServerLog]::Info("Loaded server $($server._shortName)")
-        if (($true -eq $server._autoStart) -and ($false -eq $server.IsRunning())) {
-            $server.Start()
-        }
+        $server = [VRisingServer]::New($filePath, $serverFileContents.ShortName)
+        [VRisingServerLog]::Verbose("Loaded server '$($serverFileContents.ShortName)' from $filePath")
+        return $server
     }
 
     static hidden [void] CreateServer([string]$ShortName) {
         if ($false -eq ($ShortName -match '^[0-9A-Za-z-_]+$')) {
-            [VRisingServerLog]::Error("server $ShortName is not a valid name -- allowed characters: [A-Z] [a-z] [0-9] [-] [_]")
-            return
+            throw "Server '$ShortName' is not a valid name -- allowed characters: [A-Z] [a-z] [0-9] [-] [_]"
         }
-        if (([VRisingServer]::_servers.ContainsKey($ShortName)) -and ($null -ne [VRisingServer]::_servers[$ShortName])) {
-            [VRisingServerLog]::Error("server $ShortName already exists")
-            return
+        if ([VRisingServer]::GetShortNames() -contains $ShortName) {
+            throw "Server '$ShortName' already exists"
         }
-        $server = [VRisingServer]::New([VRisingServer]::GetServerFilePath($ShortName))
-        $server._shortName = $ShortName
-        $server._updateOnStartup = $true
-        $server._autoStart = $false
-        $server._dataDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath ($server._shortName) |
-            Join-Path -ChildPath ([VRisingServer]::DATA_DIR_NAME)
-        $server._installDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath ($server._shortName) |
-            Join-Path -ChildPath ([VRisingServer]::INSTALL_DIR_NAME)
-        $server._logDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath ($server._shortName) |
-            Join-Path -ChildPath ([VRisingServer]::LOG_DIR_NAME)
-        [VRisingServer]::SaveServer($server)
-        [VRisingServer]::_servers[$server._shortName] = $server
-        [VRisingServerLog]::Info("Created server $($server._shortName)")
+        $server = [VRisingServer]::New([VRisingServer]::GetServerFilePath($ShortName), $ShortName)
+        $serverProperties = @{
+            ShortName = $ShortName
+
+            Enabled = $true
+            UpdateOnStartup = $true
+
+            DataDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath $ShortName |
+                Join-Path -ChildPath ([VRisingServer]::DATA_DIR_NAME)
+            InstallDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath $ShortName |
+                Join-Path -ChildPath ([VRisingServer]::INSTALL_DIR_NAME)
+            LogDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath $ShortName |
+                Join-Path -ChildPath ([VRisingServer]::LOG_DIR_NAME)
+            LogFile = $null
+
+            LastExitCode = 0
+            ProcessId = 0
+            StdoutLogFile = $null
+            StderrLogFile = $null
+
+            UpdateLastExitCode = 0
+            UpdateProcessId = 0
+            UpdateStdoutLogFile = $null
+            UpdateStderrLogFile = $null
+
+            CommandProcessId = 0
+            CommandStdoutLogFile = $null
+            CommandStderrLogFile = $null
+        }
+        $server.WriteProperties($serverProperties)
+        [VRisingServerLog]::Info("Created server '$($ShortName)'")
     }
 
-    static hidden [void] SaveServer([VRisingServer]$server) {
-        # get dir for path
-        $serverFileDir = $server._filePath | Split-Path -Parent
-        # check if server dir exists
-        if ($false -eq (Test-Path -LiteralPath $serverFileDir -PathType Container)) {
-            # create it
-            New-Item -Path $serverFileDir -ItemType Directory | Out-Null
-        }
-        $isRunning = $server.IsRunning()
-        $isUpdating = $server.IsUpdating()
-        $isOrchestrating = $server.IsOrchestrating()
-        [PSCustomObject]@{
-            ShortName = $server._shortName
-            UpdateOnStartup = $server._updateOnStartup
-            AutoStart = $server._autoStart
-            DataDir = $server._dataDir
-            InstallDir = $server._installDir
-            LogDir = $server._logDir
-            LogFile = if ($true -eq $isRunning) {
-                            $server._logFile
-                        } else {
-                            $null
-                        }
-
-            ProcessId = if ($true -eq $isRunning) {
-                            $server._process.Id
-                        } else {
-                            0
-                        }
-            LastExitCode = if ($true -eq $isRunning) {
-                            0
-                        } else {
-                            $server._lastExitCode
-                        }
-            StdoutLogFile = $server._stdoutLogFile
-            StderrLogFile = $server._stderrLogFile
-
-            UpdateProcessId = if ($true -eq $isUpdating) {
-                            $server._updateProcess.Id
-                        } else {
-                            0
-                        }
-            UpdateLastExitCode = if ($true -eq $isUpdating) {
-                            0
-                        } else {
-                            $server._updateLastExitCode
-                        }
-            UpdateStdoutLogFile = $server._updateStdoutLogFile
-            UpdateStderrLogFile = $server._updateStderrLogFile
-
-            OrchestratorProcessId = if ($true -eq $isOrchestrating) {
-                            $server._orchestratorProcess.Id
-                        } else {
-                            0
-                        }
-            OrchestratorLastExitCode = if ($true -eq $isOrchestrating) {
-                            0
-                        } else {
-                            $server._orchestratorLastExitCode
-                        }
-            OrchestratorStdoutLogFile = $server._orchestratorStdoutLogFile
-            OrchestratorStderrLogFile = $server._orchestratorStderrLogFile
-        } | ConvertTo-Json | Out-File -LiteralPath $server._filePath
-        [VRisingServerLog]::Verbose("Saved server $($server._shortName)")
-    }
-
-    static hidden [void] DeleteServers([string[]]$searchKeys, [bool]$force) {
-        $serversToDelete = [VRisingServer]::GetServers($searchKeys)
-        foreach ($serverToDelete in $serversToDelete) {
-            [VRisingServer]::DeleteServer($serverToDelete, $force)
-        }
-    }
-
-    static hidden [void] DeleteServer([VRisingServer]$server, [bool]$force) {
-        if (($true -eq $server.IsRunning()) -and ($false -eq $force)) {
-            [VRisingServerLog]::Error("cannot remove server $($server._shortName) while it is running -- stop first or use force to override")
-            return
-        }
-        if ([VRisingServer]::_servers.ContainsKey($server._shortName)) {
-            [VRisingServer]::_servers.Remove($server._shortName)
-        }
-        if ($true -eq (Test-Path -LiteralPath $server._filePath -PathType Leaf)) {
-            Remove-Item -LiteralPath $server._filePath
-        }
-        [VRisingServerLog]::Info("Removed server $($server._shortName)")
-    }
-
-    static hidden [void] StartServers([string]$searchKeys) {
-        $servers = [VRisingServer]::GetServers($searchKeys)
+    static hidden [void] StartServers([string[]]$searchKeys) {
+        $servers = [VRisingServer]::FindServers($searchKeys)
         foreach ($server in $servers) {
             $server.Start()
         }
     }
 
-    static hidden [void] StopServers([string]$searchKeys, [bool]$force) {
-        $servers = [VRisingServer]::GetServers($searchKeys)
+    static hidden [void] StartServers([string]$searchKey) {
+        $servers = [VRisingServer]::FindServers($searchKey)
+        foreach ($server in $servers) {
+            $server.Start()
+        }
+    }
+
+    static hidden [void] StopServers([string[]]$searchKeys, [bool]$force) {
+        $servers = [VRisingServer]::FindServers($searchKeys)
         foreach ($server in $servers) {
             $server.Stop($force)
         }
     }
 
-    static hidden [void] UpdateServers([string]$searchKeys) {
-        $servers = [VRisingServer]::GetServers($searchKeys)
+    static hidden [void] StopServers([string]$searchKey, [bool]$force) {
+        $servers = [VRisingServer]::FindServers($searchKey)
+        foreach ($server in $servers) {
+            $server.Stop($force)
+        }
+    }
+
+    static hidden [void] UpdateServers([string[]]$searchKeys) {
+        $servers = [VRisingServer]::FindServers($searchKeys)
         foreach ($server in $servers) {
             $server.Update()
         }
     }
 
-    static hidden [string[][]] ReadServerLogType([string[]]$searchKey, [VRisingServerLogType]$logType) {
-        $servers = [VRisingServer]::GetServers($searchKey)
+    static hidden [void] UpdateServers([string]$searchKey) {
+        $servers = [VRisingServer]::FindServers($searchKey)
+        foreach ($server in $servers) {
+            $server.Update()
+        }
+    }
+
+    static hidden [void] DeleteServers([string[]]$searchKeys, [bool]$force) {
+        $serversToDelete = [VRisingServer]::FindServers($searchKeys)
+        foreach ($serverToDelete in $serversToDelete) {
+            [VRisingServer]::DeleteServer($serverToDelete, $force)
+        }
+    }
+
+    static hidden [void] DeleteServers([string]$searchKey, [bool]$force) {
+        $serversToDelete = [VRisingServer]::FindServers($searchKey)
+        foreach ($serverToDelete in $serversToDelete) {
+            [VRisingServer]::DeleteServer($serverToDelete, $force)
+        }
+    }
+
+    static hidden [void] EnableServers([string[]]$searchKeys) {
+        $servers = [VRisingServer]::FindServers($searchKeys)
+        foreach ($server in $servers) {
+            $server.Enable()
+        }
+    }
+
+    static hidden [void] EnableServers([string]$searchKey) {
+        $servers = [VRisingServer]::FindServers($searchKey)
+        foreach ($server in $servers) {
+            $server.Enable()
+        }
+    }
+
+    static hidden [void] DisableServers([string[]]$searchKeys) {
+        $servers = [VRisingServer]::FindServers($searchKeys)
+        foreach ($server in $servers) {
+            $server.Disable()
+        }
+    }
+
+    static hidden [void] DisableServers([string]$searchKey) {
+        $servers = [VRisingServer]::FindServers($searchKey)
+        foreach ($server in $servers) {
+            $server.Disable()
+        }
+    }
+
+    static hidden [void] DeleteServer([VRisingServer]$server, [bool]$force) {
+        if (($true -eq $server.CommandIsRunning()) -and ($false -eq $force)) {
+            throw "Cannot remove server '$($server.ReadProperty('ShortName'))' while it is busy trying to $($server.ReadProperty('CommandType')) -- wait for command to complete first or use force to override"
+        }
+        if (($true -eq $server.IsRunning()) -and ($false -eq $force)) {
+            throw "Cannot remove server '$($server.ReadProperty('ShortName'))' while it is running -- stop first or use force to override"
+        }
+        if (($true -eq $server.IsUpdating()) -and ($false -eq $force)) {
+            throw "Cannot remove server '$($server.ReadProperty('ShortName'))' while it is updating -- wait for update to complete or use force to override"
+        }
+        if ($true -eq (Test-Path -LiteralPath $server._filePath -PathType Leaf)) {
+            Remove-Item -LiteralPath $server._filePath
+        }
+        [VRisingServerLog]::Info("Removed server '$($server.ReadProperty('ShortName'))'")
+    }
+
+    static hidden [string[][]] ReadServerLogType([string[]]$searchKey, [VRisingServerLogType]$logType, [int]$last) {
+        $servers = [VRisingServer]::FindServers($searchKey)
         $serverLogs = [System.Collections.ArrayList]::New()
         foreach ($server in $servers) {
-            $log = $server.ReadLogType($logType)
+            $log = $server.ReadLogType($logType, $last)
             if ($null -ne $log) {
                 $serverLogs.Add($log)
             }
@@ -501,61 +415,37 @@ class VRisingServer {
     }
 
     # instance variables
-    hidden [bool] $_updateOnStartup
-    hidden [bool] $_autoStart
-    hidden [string] $_shortName
     hidden [string] $_filePath
-    hidden [string] $_dataDir
-    hidden [string] $_installDir
-    hidden [string] $_logDir
-    hidden [string] $_logFile
 
-    hidden [System.Diagnostics.Process] $_process
-    hidden [int] $_lastExitCode
-    hidden [string] $_stdoutLogFile
-    hidden [string] $_stderrLogFile
-
-    hidden [System.Diagnostics.Process] $_updateProcess
-    hidden [int] $_updateLastExitCode
-    hidden [string] $_updateStdoutLogFile
-    hidden [string] $_updateStderrLogFile
-
-    hidden [System.Diagnostics.Process] $_orchestratorProcess
-    hidden [int] $_orchestratorLastExitCode
-    hidden [string] $_orchestratorStdoutLogFile
-    hidden [string] $_orchestratorStderrLogFile
-    hidden [string] $_orchestratorType
+    hidden [System.Threading.Mutex] $_propertyFileMutex
 
     # instance constructors
-    VRisingServer([string]$filePath) {
+    VRisingServer([string]$filePath, [string]$shortName) {
         $this._filePath = $filePath
+        $this._propertyFileMutex = [System.Threading.Mutex]::New($false, "VRisingServer-$shortName")
     }
 
     # instance methods
+    [bool] IsEnabled() {
+        return $this.ReadProperty('Enabled') -eq $true
+    }
+
     [bool] IsRunning() {
-        if ($null -eq $this._process) {
-            return $false
-        } elseif ($false -eq $this._process.HasExited) {
-            return $true
-        } else {
-            return $false
-        }
+        return $this.ProcessIsRunning($this.GetServerProcess())
     }
 
     [bool] IsUpdating() {
-        if ($null -eq $this._updateProcess) {
-            return $false
-        } elseif ($false -eq $this._updateProcess.HasExited) {
-            return $true
-        } else {
-            return $false
-        }
+        return $this.ProcessIsRunning($this.GetUpdateProcess())
     }
 
-    [bool] IsOrchestrating() {
-        if ($null -eq $this._orchestratorProcess) {
+    [bool] CommandIsRunning() {
+        return $this.ProcessIsRunning($this.GetCommandProcess())
+    }
+
+    hidden [bool] ProcessIsRunning([System.Diagnostics.Process]$process) {
+        if ($null -eq $process) {
             return $false
-        } elseif ($false -eq $this._orchestratorProcess.HasExited) {
+        } elseif ($false -eq $process.HasExited) {
             return $true
         } else {
             return $false
@@ -574,92 +464,183 @@ class VRisingServer {
         return $this.ReadSettingsFile($this.GetVoipSettingsFilePath())
     }
 
+    [void] KillUpdate([bool]$force) {
+        if ($true -eq $this.CommandIsRunning()) {
+            throw "Server '$($this.ReadProperty('ShortName'))' is busy trying to $($this.ReadProperty('CommandType'))"
+        }
+        if ($false -eq $this.IsUpdating()) {
+            throw "Server '$($this.ReadProperty('ShortName'))' is not currently updating"
+        }
+        if ($true -eq $force) {
+            [VRisingServerLog]::Info("Forcefully stopping update process for '$($this.ReadProperty('ShortName'))'")
+        } else {
+            [VRisingServerLog]::Info("Gracefully stopping update process for '$($this.ReadProperty('ShortName'))'")
+        }
+        & taskkill.exe '/PID' $this.ReadProperty('UpdateProcessId') $(if ($true -eq $force) { '/F' })
+    }
+
+    [void] KillCommand([bool]$force) {
+        if ($false -eq $this.CommandIsRunning()) {
+            throw "Server '$($this.ReadProperty('ShortName'))' is not currently running a command"
+        }
+        if ($true -eq $force) {
+            [VRisingServerLog]::Info("Forcefully stopping $($this.ReadProperty('CommandType')) process for '$($this.ReadProperty('ShortName'))'")
+        } else {
+            [VRisingServerLog]::Info("Gracefully stopping $($this.ReadProperty('CommandType')) process for '$($this.ReadProperty('ShortName'))'")
+        }
+        & taskkill.exe '/PID' $this.ReadProperty('CommandProcessId') $(if ($true -eq $force) { '/F' })
+    }
+
+    hidden [void] DoCommand([string]$commandType, [string]$commandString) {
+        if ($false -eq $this.IsEnabled()) {
+            throw "Server '$($this.ReadProperty('ShortName'))' is currently Disabled"
+        }
+        if ($true -eq $this.CommandIsRunning()) {
+            throw "Server '$($this.ReadProperty('ShortName'))' is busy trying to $($this.ReadProperty('CommandType'))"
+        }
+        $this.EnsureLogDirExists()
+        $properties = $this.ReadProperties(@(
+            'ShortName',
+            'LogDir'
+        ))
+        $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.Command.Info.log"
+        $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.Command.Error.log"
+        $process = Start-Process `
+            -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+            -ArgumentList "-Command & { `$ErrorActionPreference = 'Stop'; Import-Module VRisingServerManager; `$server = Get-VRisingServer -ShortName '$($properties.shortName)'; $commandString; }" `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $stdoutLogFile `
+            -RedirectStandardError $stderrLogFile `
+            -PassThru
+        $this.WriteProperties(@{
+            CommandType = $commandType
+            CommandStdoutLogFile = $stdoutLogFile
+            CommandStderrLogFile = $stderrLogFile
+            CommandProcessId = $process.Id
+        })
+        [VRisingServerLog]::Info("$commandType command issued for server '$($properties.shortName)'")
+    }
+
     [void] Start() {
-        if ($true -eq $this.IsOrchestrating()) {
-            [VRisingServerLog]::Error("Server '$($this._shortName)' is busy trying to $($this._orchestratorType)")
-            return
-        }
-        if ($true -eq $this.IsRunning()) {
-            [VRisingServerLog]::Error("server '$($this._shortName)' already running")
-            return
-        }
-        if ($true -eq $this.IsUpdating()) {
-            [VRisingServerLog]::Error("Server '$($this._shortName)' is currently updating and cannot be started")
-            return
-        }
+        $this.DoCommand('Start', "`$server.StartCommand()")
+    }
+
+    hidden [void] StartCommand() {
+        $this.WriteProperty('CommandFinished', $false)
         $this.DoStart()
+        $this.WriteProperty('CommandFinished', $true)
     }
 
     hidden [void] DoStart() {
+        if ($true -eq $this.IsRunning()) {
+            throw "Server '$($this.ReadProperty('ShortName'))' already running"
+        }
+        if ($true -eq $this.IsUpdating()) {
+            throw "Server '$($this.ReadProperty('ShortName'))' is currently updating and cannot be started"
+        }
         $this.EnsureLogDirExists()
-        $this._logFile = "VRisingServer_$((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmss.fffK")).log"
-        $this._stdoutLogFile = Join-Path -Path $this._logDir -ChildPath "VRisingServer.LastRun.Info.log"
-        $this._stderrLogFile = Join-Path -Path $this._logDir -ChildPath "VRisingServer.LastRun.Error.log"
-        # $this._process = Start-Process `
+        $properties = $this.ReadProperties(@(
+            'ShortName',
+            'InstallDir',
+            'DataDir',
+            'LogDir'
+        ))
+        $logFile = "VRisingServer_$((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmss.fffK")).log"
+        $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastRun.Info.log"
+        $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastRun.Error.log"
+        # $process = Start-Process `
         #     -WindowStyle Hidden `
-        #     -RedirectStandardOutput $this._stdoutLogFile `
-        #     -RedirectStandardError $this._stderrLogFile `
-        #     -WorkingDirectory $this._installDir `
+        #     -RedirectStandardOutput $stdoutLogFile `
+        #     -RedirectStandardError $stderrLogFile `
+        #     -WorkingDirectory $properties.InstallDir `
         #     -FilePath '.\VRisingServer.exe' `
         #     -ArgumentList @(
-        #         '-persistentDataPath', $this._dataDir,
-        #         '-logFile', $this._logFile) `
+        #         '-persistentDataPath', $properties.DataDir,
+        #         '-logFile', $logFile
+        #     ) `
         #     -PassThru
-        # $jobDuration = $(Get-Random -Minimum 10 -Maximum 30)
         $commandString = @(
-            '$jobDuration = 300;',
+            '$jobDuration = 120;',
             '$startTime = Get-Date;',
             'while (((Get-Date) - $startTime).TotalSeconds -le $jobDuration) {',
                 'Write-Host \"Running... (Exiting after $($jobDuration - ([int]((Get-Date) - $startTime).TotalSeconds)) seconds)\";',
                 'Start-Sleep -Seconds 5;',
             '}'
         ) -join ' '
-        $this._process = Start-Process `
+        $process = Start-Process `
             -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
-            -ArgumentList @(
-                '-Command', "& { $commandString }"
-            ) `
+            -ArgumentList "-Command & { $commandString }" `
             -WindowStyle Hidden `
-            -RedirectStandardOutput $this._stdoutLogFile `
-            -RedirectStandardError $this._stderrLogFile `
+            -RedirectStandardOutput $stdoutLogFile `
+            -RedirectStandardError $stderrLogFile `
             -PassThru
-        $this._process.EnableRaisingEvents = $true
-        $this.RegisterStopEvent()
-        [VRisingServer]::SaveServer($this)
-        [VRisingServerLog]::Info("Started server $($this._shortName)")
+        $this.WriteProperties(@{
+            LogFile = $logFile
+            StdoutLogFile = $stdoutLogFile
+            StderrLogFile = $stderrLogFile
+            ProcessId = $process.Id
+            LastExitCode = 0
+        })
+        [VRisingServerLog]::Info("Started server '$($properties.ShortName)'")
+    }
+
+    [void] Stop([bool]$force) {
+        $this.DoCommand('Stop', "`$server.StopCommand([System.Convert]::ToBoolean('$force'))")
+    }
+
+    hidden [void] StopCommand([bool]$force) {
+        $this.WriteProperty('CommandFinished', $false)
+        $this.DoStop($force)
+        $this.WriteProperty('CommandFinished', $true)
+    }
+
+    hidden [void] DoStop([bool]$force) {
+        if ($false -eq $this.IsRunning()) {
+            throw "Server '$($this.ReadProperty('ShortName'))' already stopped"
+        }
+        if ($true -eq $force) {
+            [VRisingServerLog]::Info("Forcefully stopping server '$($this.ReadProperty('ShortName'))'")
+        } else {
+            [VRisingServerLog]::Info("Gracefully stopping server '$($this.ReadProperty('ShortName'))'")
+        }
+        & taskkill.exe '/PID' $this.ReadProperty('ProcessId') $(if ($true -eq $force) { '/F' })
     }
 
     [void] Update() {
-        if ($true -eq $this.IsOrchestrating()) {
-            [VRisingServerLog]::Error("Server '$($this._shortName)' is busy trying to $($this._orchestratorType)")
-            return
-        }
-        if ($true -eq $this.IsRunning()) {
-            [VRisingServerLog]::Error("Server '$($this._shortName)' must be stopped before updating")
-            return
-        }
-        if ($true -eq $this.IsUpdating()) {
-            [VRisingServerLog]::Error("Server '$($this._shortName)' has already started updating")
-            return
-        }
+        $this.DoCommand('Update', "`$server.UpdateCommand()")
+    }
+
+    hidden [void] UpdateCommand() {
+        $this.WriteProperty('CommandFinished', $false)
         $this.DoUpdate()
+        $this.WriteProperty('CommandFinished', $true)
     }
 
     hidden [void] DoUpdate() {
+        if ($true -eq $this.IsRunning()) {
+            throw "Server '$($this.ReadProperty('ShortName'))' must be stopped before updating"
+        }
+        if ($true -eq $this.IsUpdating()) {
+            throw "Server '$($this.ReadProperty('ShortName'))' has already started updating"
+        }
         $this.EnsureLogDirExists()
-        $this._updateStdoutLogFile = Join-Path -Path $this._logDir -ChildPath "VRisingServer.LastUpdate.Info.log"
-        $this._updateStderrLogFile = Join-Path -Path $this._logDir -ChildPath "VRisingServer.LastUpdate.Error.log"
-        # $this._updateProcess = Start-Process `
+        $properties = $this.ReadProperties(@(
+            'ShortName',
+            'LogDir'
+        ))
+        $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastUpdate.Info.log"
+        $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastUpdate.Error.log"
+        # $process = Start-Process `
         #     -FilePath ([VRisingServer]::_config['SteamCmdPath']) `
         #     -ArgumentList @(
-        #         '+force_install_dir', $this._installDir,
+        #         '+force_install_dir', $this.ReadProperty('InstallDir'),
         #         '+login', 'anonymous',
         #         '+app_update', [VRisingServer]::STEAM_APP_ID,
         #         '+quit'
         #     ) `
         #     -WindowStyle Hidden `
-        #     -RedirectStandardOutput $this._updateStdoutLogFile `
-        #     -RedirectStandardError $this._updateStderrLogFile `
+        #     -RedirectStandardOutput  $this.ReadProperty('UpdateStdoutLogFile') `
+        #     -RedirectStandardError $this.ReadProperty('UpdateStderrLogFile') `
         #     -PassThru
         $commandString = @(
             '$jobDuration = 30;',
@@ -669,188 +650,68 @@ class VRisingServer {
                 'Start-Sleep -Seconds 5;',
             '}'
         ) -join ' '
-        $this._updateProcess = Start-Process `
+        $process = Start-Process `
             -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
             -ArgumentList @(
                 '-Command', "& { $commandString }"
             ) `
             -WindowStyle Hidden `
-            -RedirectStandardOutput $this._updateStdoutLogFile `
-            -RedirectStandardError $this._updateStderrLogFile `
+            -RedirectStandardOutput $stdoutLogFile `
+            -RedirectStandardError $stderrLogFile `
             -PassThru
-        $this._updateProcess.EnableRaisingEvents = $true
-        $this.RegisterUpdateStopEvent()
-        [VRisingServer]::SaveServer($this)
-        [VRisingServerLog]::Info("Updating server $($this._shortName)")
-    }
-
-    [void] Stop([bool]$force) {
-        if ($true -eq $this.IsOrchestrating()) {
-            [VRisingServerLog]::Error("Server '$($this._shortName)' is busy trying to $($this._orchestratorType)")
-            return
-        }
-        if ($false -eq $this.IsRunning()) {
-            [VRisingServerLog]::Error("Server '$($this._shortName)' already stopped")
-            return
-        }
-        $this.DoStop($force)
-    }
-
-    hidden [void] DoStop([bool]$force) {
-        if ($true -eq $force) {
-            [VRisingServerLog]::Info("Forcefully stopping server $($this._shortName)")
-        } else {
-            [VRisingServerLog]::Info("Gracefully stopping server $($this._shortName)")
-        }
-        & taskkill.exe '/PID' $this._process.Id $(if ($true -eq $force) { '/F' })
-    }
-
-    [void] StopUpdate([bool]$force) {
-        if ($true -eq $this.IsOrchestrating()) {
-            [VRisingServerLog]::Error("Server '$($this._shortName)' is busy trying to $($this._orchestratorType)")
-            return
-        }
-        if ($false -eq $this.IsUpdating()) {
-            [VRisingServerLog]::Error("Server '$($this._shortName)' is not currently updating")
-            return
-        }
-        $this.DoStopUpdate($force)
-    }
-
-    hidden [void] DoStopUpdate([bool]$force) {
-        if ($true -eq $force) {
-            [VRisingServerLog]::Info("Forcefully stopping update process for $($this._shortName)")
-        } else {
-            [VRisingServerLog]::Info("Gracefully stopping update process for $($this._shortName)")
-        }
-        & taskkill.exe '/PID' $this._updateProcess.Id $(if ($true -eq $force) { '/F' })
+        $this.WriteProperties(@{
+            UpdateStdoutLogFile = $stdoutLogFile
+            UpdateStderrLogFile = $stderrLogFile
+            UpdateProcessId = $process.Id
+            UpdateLastExitCode = 0
+        })
+        [VRisingServerLog]::Info("Updating server '$($properties.ShortName)'")
     }
 
     [void] Restart([bool]$force) {
-        if ($true -eq $this.IsOrchestrating()) {
-            [VRisingServerLog]::Error("Server '$($this._shortName)' is busy trying to $($this._orchestratorType)")
-            return
-        }
-        $this._orchestratorType = 'Restart'
-        $this.EnsureLogDirExists()
-        $this._orchestratorStdoutLogFile = Join-Path -Path $this._logDir -ChildPath "VRisingServer.Orchestrator.Info.log"
-        $this._orchestratorStderrLogFile = Join-Path -Path $this._logDir -ChildPath "VRisingServer.Orchestrator.Error.log"
-        # $this._process = Start-Process `
-        #     -WindowStyle Hidden `
-        #     -RedirectStandardOutput $this._stdoutLogFile `
-        #     -RedirectStandardError $this._stderrLogFile `
-        #     -WorkingDirectory $this._installDir `
-        #     -FilePath '.\VRisingServer.exe' `
-        #     -ArgumentList @(
-        #         '-persistentDataPath', $this._dataDir,
-        #         '-logFile', $this._logFile) `
-        #     -PassThru
-        # $jobDuration = $(Get-Random -Minimum 10 -Maximum 30)
-        # TODO: switch to file-change-event-monitor based loading?
-        $commandString = @(
-            'param($serverShortName)',
-            'Import-Module VRisingServerManager;',
-            "`$server = Get-VRisingServer -ShortName $($this._shortName);",
-            '$server.DoStart();'
-        ) -join ' '
-        $this._orchestratorProcess = Start-Process `
-            -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
-            -ArgumentList @(
-                '-Command', "`$ErrorActionPreference = 'Stop'; & { $commandString }"
-            ) `
-            -WindowStyle Hidden `
-            -RedirectStandardOutput $this._orchestratorStdoutLogFile `
-            -RedirectStandardError $this._orchestratorStderrLogFile `
-            -PassThru
-        $this._orchestratorProcess.EnableRaisingEvents = $true
-        $this.RegisterOrchestratorStopEvent()
-        [VRisingServer]::SaveServer($this)
-        [VRisingServerLog]::Info("Starting restart for server $($this._shortName)")
+        $this.DoCommand('Restart', "`$server.RestartCommand([System.Convert]::ToBoolean('$force'))")
     }
 
-    hidden [void] RegisterStopEvent() {
-        # don't duplicate for existing jobs
-        $subscribersForExitedEvent = Get-EventSubscriber |
-            Where-Object { $_.SourceObject.Id -eq $this._process.Id -and $_.EventName -eq 'Exited' }
-        if (($null -ne $subscribersForExitedEvent) -and ($subscribersForExitedEvent.Count -gt 0)) {
-            return
-        }
-        Register-ObjectEvent `
-                -InputObject $this._process `
-                -EventName Exited `
-                -MessageData $this._shortName `
-                -Action {
-            # this runs automatically when the process exits
-            $server = [VRisingServer]::_servers[$Event.MessageData]
-            $server._process = $null
-            $server._lastExitCode = $Sender.ExitCode
-            [VRisingServer]::SaveServer($server)
-            if ($Sender.ExitCode -eq 0) {
-                [VRisingServerLog]::Info("Server $($server._shortName) has stopped successfully")
-            } else {
-                [VRisingServerLog]::FakeError("Server $($server._shortName) stopped with non-zero exit code $($Sender.ExitCode)")
+    hidden [void] RestartCommand([bool]$force) {
+        $this.WriteProperty('CommandFinished', $false)
+        if ($true -eq $this.IsRunning()) {
+            $shortName = $this.ReadProperty('ShortName')
+            $stopTimeout = 30
+            $process = $this.GetServerProcess()
+            $this.DoStop($force)
+            try {
+                [VRisingServerLog]::Info("Waiting on server '$shortName' to stop ($stopTimeout second timeout)...")
+                $process | Wait-Process -Timeout $stopTimeout -ErrorAction Stop
+            } catch [System.TimeoutException] {
+                throw "Exceeded timeout waiting for server '$shortName' to stop"
             }
-            Unregister-Event -SubscriptionId $Event.EventIdentifier
-            Remove-Job -Name $Event.SourceIdentifier
-        } | Out-Null
+            [VRisingServerLog]::Info("Server '$shortName' has stopped")
+        }
+        $this.DoStart()
+        $this.WriteProperty('CommandFinished', $true)
     }
 
-    hidden [void] RegisterUpdateStopEvent() {
-        # don't duplicate for existing jobs
-        $subscribersForExitedEvent = Get-EventSubscriber |
-            Where-Object { $_.SourceObject.Id -eq $this._updateProcess.Id -and $_.EventName -eq 'Exited' }
-        if (($null -ne $subscribersForExitedEvent) -and ($subscribersForExitedEvent.Count -gt 0)) {
-            return
-        }
-        Register-ObjectEvent `
-                -InputObject $this._updateProcess `
-                -EventName Exited `
-                -MessageData $this._shortName `
-                -Action {
-            # this runs automatically when the process exits
-            $server = [VRisingServer]::_servers[$Event.MessageData]
-            $server._updateProcess = $null
-            $server._updateLastExitCode = $Sender.ExitCode
-            [VRisingServer]::SaveServer($server)
-            if ($Sender.ExitCode -eq 0) {
-                [VRisingServerLog]::Info("Update process for $($server._shortName) has exited successfully")
-            } else {
-                [VRisingServerLog]::FakeError("Update process for $($server._shortName) returned non-zero exit code $($Sender.ExitCode)")
-            }
-            Unregister-Event -SubscriptionId $Event.EventIdentifier
-            Remove-Job -Name $Event.SourceIdentifier
-        } | Out-Null
+    [void] Enable() {
+        $this.WriteProperty('Enabled', $true)
+        [VRisingServerLog]::Info("Enabled server '$($this.ReadProperty('ShortName'))'")
     }
 
-    hidden [void] RegisterOrchestratorStopEvent() {
-        # don't duplicate for existing jobs
-        $subscribersForExitedEvent = Get-EventSubscriber |
-            Where-Object { $_.SourceObject.Id -eq $this._orchestratorProcess.Id -and $_.EventName -eq 'Exited' }
-        if (($null -ne $subscribersForExitedEvent) -and ($subscribersForExitedEvent.Count -gt 0)) {
-            return
+    [void] Disable() {
+        if ($true -eq $this.CommandIsRunning()) {
+            throw "Cannot disable server '$($this.ReadProperty('ShortName'))' while it is busy trying to $($this.ReadProperty('CommandType'))"
         }
-        Register-ObjectEvent `
-                -InputObject $this._orchestratorProcess `
-                -EventName Exited `
-                -MessageData $this._shortName `
-                -Action {
-            # this runs automatically when the process exits
-            $server = [VRisingServer]::_servers[$Event.MessageData]
-            $server._orchestratorProcess = $null
-            $server._orchestratorLastExitCode = $Sender.ExitCode
-            [VRisingServer]::SaveServer($server)
-            if ($Sender.ExitCode -eq 0) {
-                [VRisingServerLog]::Info("$($server._orchestratorType) for $($server._shortName) has exited successfully")
-            } else {
-                [VRisingServerLog]::FakeError("$($server._orchestratorType) for $($server._shortName) returned non-zero exit code $($Sender.ExitCode)")
-            }
-            Unregister-Event -SubscriptionId $Event.EventIdentifier
-            Remove-Job -Name $Event.SourceIdentifier
-        } | Out-Null
+        if ($true -eq $this.IsRunning()) {
+            throw "Cannot disable server '$($this.ReadProperty('ShortName'))' while it is running"
+        }
+        if ($true -eq $this.IsUpdating()) {
+            throw "Cannot disable server '$($this.ReadProperty('ShortName'))' while it is updating"
+        }
+        $this.WriteProperty('Enabled', $false)
+        [VRisingServerLog]::Info("Disabled server '$($this.ReadProperty('ShortName'))'")
     }
 
     hidden [string] GetSettingsDirPath() {
-        return Join-Path -Path $this._dataDir -ChildPath ([VRisingServer]::SETTINGS_DIR_NAME)
+        return Join-Path -Path $this.ReadProperty('DataDir') -ChildPath ([VRisingServer]::SETTINGS_DIR_NAME)
     }
 
     hidden [string] GetHostSettingsFilePath() {
@@ -866,23 +727,7 @@ class VRisingServer {
     }
 
     hidden [string] GetSavesDirPath() {
-        return Join-Path -Path $this._dataDir -ChildPath ([VRisingServer]::SAVES_DIR_NAME)
-    }
-
-    hidden [string] GetDataDirPath() {
-        return $this._dataDir
-    }
-
-    hidden [string] GetInstallDirPath() {
-        return $this._installDir
-    }
-
-    hidden [string] GetLogDirPath() {
-        return $this._logDir
-    }
-
-    hidden [string] GetLogFilePath() {
-        return $this._logFile
+        return Join-Path -Path $this.ReadProperty('DataDir') -ChildPath ([VRisingServer]::SAVES_DIR_NAME)
     }
 
     hidden [string] GetDisplayName() {
@@ -896,8 +741,8 @@ class VRisingServer {
     }
 
     hidden [string] GetStatus() {
-        if ($true -eq $this.IsOrchestrating()) {
-            switch($this._orchestratorType) {
+        if ($true -eq $this.CommandIsRunning()) {
+            switch($this.ReadProperty('CommandType')) {
                 'Restart' {
                     return 'Restarting'
                 }
@@ -907,7 +752,9 @@ class VRisingServer {
             return 'Running'
         } elseif ($true -eq $this.IsUpdating()) {
             return 'Updating'
-        } elseif ($this._lastExitCode -ne 0) {
+        } elseif ($false -eq $this.IsEnabled()) {
+            return 'Disabled'
+        } elseif ($this.ReadProperty('LastExitCode') -ne 0) {
             return 'Error'
         } else {
             return 'Stopped'
@@ -917,20 +764,31 @@ class VRisingServer {
     hidden [string] GetUpdateStatus() {
         if ($true -eq $this.IsUpdating()) {
             return 'InProgress'
-        } elseif ($this._updateLastExitCode -ne 0) {
+        } elseif ($this.ReadProperty('UpdateLastExitCode') -ne 0) {
             return 'Failed'
         } else {
             return 'OK'
         }
     }
 
+    hidden [string] GetCommandStatus() {
+        if ($true -eq $this.CommandIsRunning()) {
+            return 'Executing'
+        } elseif ($this.ReadProperty('CommandFinished') -eq $true) {
+            return 'OK'
+        } else {
+            return 'Error'
+        }
+    }
+
     hidden [string] GetUptimeString() {
-        if ($null -eq $this._process) {
+        $process = $this.GetServerProcess()
+        if ($null -eq $process) {
             return $null
-        } elseif ($true -eq $this._process.HasExited) {
+        } elseif ($true -eq $process.HasExited) {
             return $null
         } else {
-            $uptime = (Get-Date) - $this._process.StartTime
+            $uptime = (Get-Date) - $process.StartTime
             $uptimeString = $null
             if ($uptime.Days -gt 0) {
                 $uptimeString += "$(($uptime.TotalDays -split '\.')[0])d"
@@ -946,8 +804,9 @@ class VRisingServer {
     }
 
     hidden [void] EnsureLogDirExists() {
-        if ($false -eq (Test-Path -LiteralPath $this._logDir -PathType Container)) {
-            New-Item -Path $this._logDir -ItemType Directory | Out-Null
+        $logDir = $this.ReadProperty('LogDir')
+        if ($false -eq (Test-Path -LiteralPath $logDir -PathType Container)) {
+            New-Item -Path $logDir -ItemType Directory | Out-Null
         }
     }
 
@@ -958,42 +817,129 @@ class VRisingServer {
         return $null
     }
 
-    hidden [string[]] ReadLogType([VRisingServerLogType]$logType) {
+    hidden [string[]] ReadLogType([VRisingServerLogType]$logType, [int]$last) {
         $logFile = $null
         switch ($logType) {
             ([VRisingServerLogType]::File) {
-                $logFile = $this._logFile
+                $logFile = $this.ReadProperty('LogFile')
                 break
             }
             ([VRisingServerLogType]::Output) {
-                $logFile = $this._stdoutLogFile
+                $logFile = $this.ReadProperty('StdoutLogFile')
                 break
             }
             ([VRisingServerLogType]::Error) {
-                $logFile = $this._stderrLogFile
+                $logFile = $this.ReadProperty('StderrLogFile')
                 break
             }
             ([VRisingServerLogType]::Update) {
-                $logFile = $this._updateStdoutLogFile
+                $logFile = $this.ReadProperty('UpdateStdoutLogFile')
                 break
             }
             ([VRisingServerLogType]::UpdateError) {
-                $logFile = $this._updateStderrLogFile
+                $logFile = $this.ReadProperty('UpdateStderrLogFile')
                 break
             }
-            ([VRisingServerLogType]::Orchestrator) {
-                $logFile = $this._orchestratorStdoutLogFile
+            ([VRisingServerLogType]::Command) {
+                $logFile = $this.ReadProperty('CommandStdoutLogFile')
                 break
             }
-            ([VRisingServerLogType]::OrchestratorError) {
-                $logFile = $this._orchestratorStderrLogFile
+            ([VRisingServerLogType]::CommandError) {
+                $logFile = $this.ReadProperty('CommandStderrLogFile')
                 break
             }
         }
         if ($false -eq [string]::IsNullOrWhiteSpace($logFile)) {
-            return Get-Content -LiteralPath $logFile
+            $logFileContent = Get-Content -LiteralPath $logFile
+            if ($last -gt 0) {
+                $logFileContent = $logFileContent | Select-Object -Last $last
+            }
+            $logFileContent = $logFileContent | ForEach-Object { "[$($this.ReadProperty('ShortName'))] $_" }
+            return $logFileContent
         }
         return $null
+    }
+
+    hidden [psobject] ReadProperty([string]$name) {
+        return $this.ReadProperties(@($name)).$name
+    }
+
+    hidden [psobject] ReadProperties([string[]]$names) {
+        if ($false -eq (Test-Path -LiteralPath $this._filePath -PathType Leaf)) {
+            return $null
+        }
+        $fileContent = Get-Content $this._filePath | ConvertFrom-Json
+        $properties = [hashtable]@{}
+        foreach ($name in $names) {
+            if ($fileContent.PSObject.Properties.Name -contains $name) {
+                $properties[$name] = $fileContent.$name
+            }
+        }
+        return [pscustomobject]$properties
+    }
+
+    hidden [void] WriteProperty([string]$name, [psobject]$value) {
+        $this.WriteProperties(@{$name=$value})
+    }
+
+    hidden [void] WriteProperties([hashtable]$nameValues) {
+        # get dir for path
+        $serverFileDir = $this._filePath | Split-Path -Parent
+        # check if server dir exists
+        if ($false -eq (Test-Path -LiteralPath $serverFileDir -PathType Container)) {
+            # create it
+            New-Item -Path $serverFileDir -ItemType Directory | Out-Null
+        }
+        $this._propertyFileMutex.WaitOne()
+        # check if file exists
+        if ($true -eq (Test-Path -LiteralPath $this._filePath -PathType Leaf)) {
+            $fileContent = Get-Content $this._filePath | ConvertFrom-Json
+        } else {
+            $fileContent = [PSCustomObject]@{}
+        }
+        foreach ($nameValue in $nameValues.GetEnumerator()) {
+            if ($fileContent.PSObject.Properties.Name -contains $nameValue.Name) {
+                $fileContent.$($nameValue.Name) = $nameValue.Value
+            } else {
+                $fileContent | Add-Member -MemberType NoteProperty -Name $nameValue.Name -Value $nameValue.Value
+            }
+        }
+        $fileContent | ConvertTo-Json | Out-File -LiteralPath $this._filePath
+        $this._propertyFileMutex.ReleaseMutex()
+    }
+
+    hidden [System.Diagnostics.Process] GetServerProcess() {
+        return $this.GetProcessByPropertyName('ProcessId')
+    }
+
+    hidden [System.Diagnostics.Process] GetUpdateProcess() {
+        return $this.GetProcessByPropertyName('UpdateProcessId')
+    }
+
+    hidden [System.Diagnostics.Process] GetCommandProcess() {
+        return $this.GetProcessByPropertyName('CommandProcessId')
+    }
+
+    hidden [System.Diagnostics.Process] GetProcessByPropertyName([string]$name) {
+        $processId = $this.ReadProperty($name)
+        if ($processId -gt 0) {
+            return $this.GetProcessById($processId)
+        } else {
+            return $null
+        }
+    }
+
+    hidden [System.Diagnostics.Process] GetProcessById([int]$processId) {
+        try {
+            return Get-Process -Id $processId
+        }
+        catch [Microsoft.PowerShell.Commands.ProcessCommandException] {
+            if ('NoProcessFoundForGivenId' -eq ($_.FullyQualifiedErrorid -split ',')[0]) {
+                return $null
+            } else {
+                throw $_
+            }
+        }
     }
 }
 

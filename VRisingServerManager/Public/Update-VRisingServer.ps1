@@ -1,5 +1,5 @@
 function Update-VRisingServer {
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName='ByShortName')]
     param (
         [Parameter(Position=0, ParameterSetName='ByShortName')]
         [string[]] $ShortName,

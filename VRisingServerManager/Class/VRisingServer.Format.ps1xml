@@ -9,9 +9,9 @@
       <TableControl>
         <AutoSize/>
         <TableHeaders>
-          <TableColumnHeader>
-            <Width>12</Width>
-          </TableColumnHeader>
+          <TableColumnHeader />
+          <TableColumnHeader />
+          <TableColumnHeader />
           <TableColumnHeader />
           <TableColumnHeader />
           <TableColumnHeader />
@@ -25,6 +25,12 @@
               </TableColumnItem>
               <TableColumnItem>
                 <PropertyName>Uptime</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>Command</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>CommandStatus</PropertyName>
               </TableColumnItem>
               <TableColumnItem>
                 <PropertyName>LastUpdate</PropertyName>

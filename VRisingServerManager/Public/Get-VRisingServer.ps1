@@ -7,7 +7,7 @@ function Get-VRisingServer {
         [string[]] $ShortName
     )
 
-    return [VRisingServer]::GetServers($ShortName)
+    return [VRisingServer]::FindServers($ShortName)
 }
 
 Register-ArgumentCompleter -CommandName Get-VRisingServer -ParameterName ShortName -ScriptBlock $function:ServerShortNameArgumentCompleter

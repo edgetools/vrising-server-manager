@@ -6,7 +6,7 @@ function Remove-VRisingServer {
         [Parameter(Position=0, ParameterSetName='ByShortName')]
         [string[]] $ShortName,
 
-        [Parameter(Position=0, ParameterSetName='ByServer', ValueFromPipeline=$true)]
+        [Parameter(ParameterSetName='ByServer', ValueFromPipeline=$true)]
         [VRisingServer] $Server,
 
         [Parameter()]

@@ -1,4 +1,4 @@
-function Start-VRisingServer {
+function Enable-VRisingServer {
     [CmdletBinding(DefaultParameterSetName='ByShortName')]
     param (
         [Parameter(Position=0, ParameterSetName='ByShortName')]
@@ -10,11 +10,11 @@ function Start-VRisingServer {
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
-            [VRisingServer]::StartServers($ShortName)
+            [VRisingServer]::EnableServers($ShortName)
         } else {
-            $Server.Start()
+            $Server.Enable()
         }
     }
 }
 
-Register-ArgumentCompleter -CommandName Start-VRisingServer -ParameterName ShortName -ScriptBlock $function:ServerShortNameArgumentCompleter
+Register-ArgumentCompleter -CommandName Enable-VRisingServer -ParameterName ShortName -ScriptBlock $function:ServerShortNameArgumentCompleter
