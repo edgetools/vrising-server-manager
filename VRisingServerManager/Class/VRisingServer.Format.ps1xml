@@ -16,6 +16,7 @@
           <TableColumnHeader />
           <TableColumnHeader />
           <TableColumnHeader />
+          <TableColumnHeader />
         </TableHeaders>
         <TableRowEntries>
           <TableRowEntry>
@@ -37,6 +38,9 @@
               </TableColumnItem>
               <TableColumnItem>
                 <PropertyName>ShortName</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>SaveName</PropertyName>
               </TableColumnItem>
               <TableColumnItem>
                 <PropertyName>DisplayName</PropertyName>

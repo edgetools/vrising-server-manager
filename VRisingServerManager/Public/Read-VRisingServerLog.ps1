@@ -14,14 +14,47 @@ function Read-VRisingServerLog {
         [VRisingServer] $Server,
 
         [Parameter()]
-        [int]$Last
+        [Alias('Tail')]
+        [int]$Last,
+
+        [Parameter()]
+        [switch]$Follow
     )
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
-            [VRisingServer]::ReadServerLogType($ShortName, $LogType, $Last)
+            $servers = [VRisingServer]::FindServers($ShortName)
         } else {
-            $Server.ReadLogType($LogType, $Last)
+            $servers = @($Server)
+        }
+        foreach ($serverItem in $servers) {
+            $logFile = $serverItem.GetLogFilePath($LogType)
+            if ($false -eq [string]::IsNullOrWhiteSpace($logFile)) {
+                $shortName = $($serverItem.ReadProperty('ShortName'))
+                $getContentParams = @{
+                    LiteralPath = $logFile
+                }
+                if ($Last -gt 0) {
+                    $getContentParams['Last'] = $Last
+                }
+                if ($true -eq $Follow) {
+                    $getContentParams['Wait'] = $true
+                    $keepFollowing = $true
+                    while ($true -eq $keepFollowing) {
+                        try {
+                            Get-Content @getContentParams | ForEach-Object { "[$shortName] $_" }
+                            $keepFollowing = $false
+                        } catch [System.IO.FileNotFoundException],[System.Management.Automation.ItemNotFoundException] {
+                            # allow following a log file that doesn't exist yet
+                            # or that gets rotated out from under it while being watched
+                            Start-Sleep -Seconds 1
+                            continue
+                        }
+                    }
+                } else {
+                    Get-Content @getContentParams | ForEach-Object { "[$shortName] $_" }
+                }
+            }
         }
     }
 }

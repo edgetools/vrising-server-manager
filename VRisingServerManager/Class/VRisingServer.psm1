@@ -35,9 +35,15 @@ class VRisingServer {
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
+            -MemberName SaveName `
+            -MemberType ScriptProperty `
+            -Value { return $this.ReadHostSetting('SaveName') } `
+            -Force
+        Update-TypeData `
+            -TypeName "VRisingServer" `
             -MemberName DisplayName `
             -MemberType ScriptProperty `
-            -Value { return $this.GetDisplayName() } `
+            -Value { return $this.ReadHostSetting('Name') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -115,7 +121,7 @@ class VRisingServer {
             -TypeName "VRisingServer" `
             -MemberName LogFile `
             -MemberType ScriptProperty `
-            -Value { return $this.ReadProperty('LogFile') } `
+            -Value { return $this.GetLogFilePath([VRisingServerLogType]::File) } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -282,7 +288,6 @@ class VRisingServer {
                 Join-Path -ChildPath ([VRisingServer]::INSTALL_DIR_NAME)
             LogDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath $ShortName |
                 Join-Path -ChildPath ([VRisingServer]::LOG_DIR_NAME)
-            LogFile = $null
 
             LastExitCode = 0
             ProcessId = 0
@@ -321,28 +326,17 @@ class VRisingServer {
         [VRisingServerLog]::Info("Removed server '$shortName'")
     }
 
-    static hidden [string[][]] ReadServerLogType([string[]]$searchKey, [VRisingServerLogType]$logType, [int]$last) {
-        $servers = [VRisingServer]::FindServers($searchKey)
-        $serverLogs = [System.Collections.ArrayList]::New()
-        foreach ($server in $servers) {
-            $log = $server.ReadLogType($logType, $last)
-            if ($null -ne $log) {
-                $serverLogs.Add($log)
-            }
-        }
-        $serverLogsArray = $serverLogs.ToArray([string[]])
-        return $serverLogsArray
-    }
-
     # instance variables
     hidden [string] $_filePath
 
-    hidden [System.Threading.Mutex] $_propertyFileMutex
+    hidden [System.Threading.Mutex] $_propertiesFileMutex
+    hidden [System.Threading.Mutex] $_settingsFileMutex
 
     # instance constructors
     VRisingServer([string]$filePath, [string]$shortName) {
         $this._filePath = $filePath
-        $this._propertyFileMutex = [System.Threading.Mutex]::New($false, "VRisingServer-$shortName")
+        $this._propertiesFileMutex = [System.Threading.Mutex]::New($false, "VRisingServer-$shortName-properties")
+        $this._settingsFileMutex = [System.Threading.Mutex]::New($false, "VRisingServer-$shortName-settings")
     }
 
     # instance methods
@@ -465,20 +459,23 @@ class VRisingServer {
             'DataDir'
         ))
         $this.EnsureDirPathExists($properties.LogDir)
-        $logFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer_$((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmss.fffK")).log"
+        $logFile = $this.GetLogFilePath([VRisingServerLogType]::File)
         $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastRun.Info.log"
         $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastRun.Error.log"
-        $process = Start-Process `
-            -WindowStyle Hidden `
-            -RedirectStandardOutput $stdoutLogFile `
-            -RedirectStandardError $stderrLogFile `
-            -WorkingDirectory $properties.InstallDir `
-            -FilePath '.\VRisingServer.exe' `
-            -ArgumentList @(
-                '-persistentDataPath', $properties.DataDir,
-                '-logFile', $logFile
-            ) `
-            -PassThru
+        $serverExePath = Join-Path -Path $properties.InstallDir -ChildPath 'VRisingServer.exe'
+        try {
+            $process = Start-Process `
+                -WindowStyle Hidden `
+                -RedirectStandardOutput $stdoutLogFile `
+                -RedirectStandardError $stderrLogFile `
+                -FilePath $serverExePath `
+                -ArgumentList "-persistentDataPath `"$($properties.DataDir)`" -logFile `"$logFile`"" `
+                -PassThru
+        } catch [System.IO.DirectoryNotFoundException] {
+            throw [VRisingServerException]::New($properties.ShortName, "Server '$($properties.ShortName)' failed to start due to missing directory -- try running update first")
+        } catch [InvalidOperationException] {
+            throw [VRisingServerException]::New($properties.ShortName, "Server '$($properties.ShortName)' failed to start: $($_.Exception.Message)")
+        }
         # $commandString = @(
         #     '$jobDuration = 120;',
         #     '$startTime = Get-Date;',
@@ -495,7 +492,6 @@ class VRisingServer {
         #     -RedirectStandardError $stderrLogFile `
         #     -PassThru
         $this.WriteProperties(@{
-            LogFile = $logFile
             StdoutLogFile = $stdoutLogFile
             StderrLogFile = $stderrLogFile
             ProcessId = $process.Id
@@ -651,11 +647,11 @@ class VRisingServer {
         return Join-Path -Path $this.ReadProperty('DataDir') -ChildPath ([VRisingServer]::SAVES_DIR_NAME)
     }
 
-    hidden [string] GetDisplayName() {
+    hidden [string] ReadHostSetting([string]$name) {
         $serverHostSettings = $this.GetHostSettings()
         if ($null -ne $serverHostSettings) {
-            if ($serverHostSettings.PSObject.Properties.Name -contains 'Name') {
-                return $serverHostSettings.Name
+            if ($serverHostSettings.PSObject.Properties.Name -contains $name) {
+                return $serverHostSettings.$name
             }
         }
         return $null
@@ -739,45 +735,29 @@ class VRisingServer {
         return $null
     }
 
-    hidden [string[]] ReadLogType([VRisingServerLogType]$logType, [int]$last) {
-        $logFile = $null
+    hidden [string] GetLogFilePath([VRisingServerLogType]$logType) {
         switch ($logType) {
             ([VRisingServerLogType]::File) {
-                $logFile = $this.ReadProperty('LogFile')
-                break
+                return Join-Path -Path $this.ReadProperty('LogDir') -ChildPath 'VRisingServer.log'
             }
             ([VRisingServerLogType]::Output) {
-                $logFile = $this.ReadProperty('StdoutLogFile')
-                break
+                return $this.ReadProperty('StdoutLogFile')
             }
             ([VRisingServerLogType]::Error) {
-                $logFile = $this.ReadProperty('StderrLogFile')
-                break
+                return $this.ReadProperty('StderrLogFile')
             }
             ([VRisingServerLogType]::Update) {
-                $logFile = $this.ReadProperty('UpdateStdoutLogFile')
-                break
+                return $this.ReadProperty('UpdateStdoutLogFile')
             }
             ([VRisingServerLogType]::UpdateError) {
-                $logFile = $this.ReadProperty('UpdateStderrLogFile')
-                break
+                return $this.ReadProperty('UpdateStderrLogFile')
             }
             ([VRisingServerLogType]::Command) {
-                $logFile = $this.ReadProperty('CommandStdoutLogFile')
-                break
+                return $this.ReadProperty('CommandStdoutLogFile')
             }
             ([VRisingServerLogType]::CommandError) {
-                $logFile = $this.ReadProperty('CommandStderrLogFile')
-                break
+                return $this.ReadProperty('CommandStderrLogFile')
             }
-        }
-        if ($false -eq [string]::IsNullOrWhiteSpace($logFile)) {
-            $logFileContent = Get-Content -LiteralPath $logFile
-            if ($last -gt 0) {
-                $logFileContent = $logFileContent | Select-Object -Last $last
-            }
-            $logFileContent = $logFileContent | ForEach-Object { "[$($this.ReadProperty('ShortName'))] $_" }
-            return $logFileContent
         }
         return $null
     }
@@ -812,7 +792,7 @@ class VRisingServer {
             # create it
             New-Item -Path $serverFileDir -ItemType Directory | Out-Null
         }
-        $this._propertyFileMutex.WaitOne()
+        $this._propertiesFileMutex.WaitOne()
         # check if file exists
         if ($true -eq (Test-Path -LiteralPath $this._filePath -PathType Leaf)) {
             $fileContent = Get-Content $this._filePath | ConvertFrom-Json
@@ -827,7 +807,10 @@ class VRisingServer {
             }
         }
         $fileContent | ConvertTo-Json | Out-File -LiteralPath $this._filePath
-        $this._propertyFileMutex.ReleaseMutex()
+        $this._propertiesFileMutex.ReleaseMutex()
+    }
+
+    hidden [void] WriteSettingsFile() {
     }
 
     hidden [System.Diagnostics.Process] GetServerProcess() {
