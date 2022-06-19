@@ -304,55 +304,6 @@ class VRisingServer {
         [VRisingServerLog]::Info("Created server '$($ShortName)'")
     }
 
-    static hidden [void] DoServers([string]$doCommandName, [psobject[]]$doCommandArgs, [string[]]$searchKeys) {
-        $servers = [VRisingServer]::FindServers($searchKeys)
-        [VRisingServer]::DoServers($doCommandName, $doCommandArgs, $servers)
-    }
-
-    static hidden [void] DoServers([string]$doCommandName, [psobject[]]$doCommandArgs, [string]$searchKey) {
-        $servers = [VRisingServer]::FindServers($searchKey)
-        [VRisingServer]::DoServers($doCommandName, $doCommandArgs, $servers)
-    }
-
-    static hidden [void] DoServers([string]$doCommandName, [psobject[]]$doCommandArgs, [VRisingServer[]]$servers) {
-        $exceptions = [System.Collections.ArrayList]::New()
-        foreach ($server in $servers) {
-            try {
-                switch($doCommandName) {
-                    'Start' {
-                        $server.Start()
-                        break
-                    }
-                    'Stop' {
-                        $server.Stop($doCommandArgs[0])
-                        break
-                    }
-                    'Update' {
-                        $server.Update()
-                        break
-                    }
-                    'Delete' {
-                        [VRisingServer]::DeleteServer($server, $doCommandArgs[0])
-                        break
-                    }
-                    'Enable' {
-                        $server.Enable()
-                        break
-                    }
-                    'Disable' {
-                        $server.Disable()
-                        break
-                    }
-                }
-            } catch [VRisingServerException] {
-                $exceptions.Add($_.Exception)
-            }
-        }
-        if ($exceptions.Count -gt 0) {
-            throw [System.AggregateException]::New($exceptions)
-        }
-    }
-
     static hidden [void] DeleteServer([VRisingServer]$server, [bool]$force) {
         if (($true -eq $server.CommandIsRunning()) -and ($false -eq $force)) {
             throw [VRisingServerException]::New($($server.ReadProperty('ShortName')), "Cannot remove server '$($server.ReadProperty('ShortName'))' while it is busy trying to $($server.ReadProperty('CommandType')) -- wait for command to complete first or use force to override")
@@ -467,11 +418,11 @@ class VRisingServer {
         if ($true -eq $this.CommandIsRunning()) {
             throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' is busy trying to $($this.ReadProperty('CommandType'))")
         }
-        $this.EnsureLogDirExists()
         $properties = $this.ReadProperties(@(
             'ShortName',
             'LogDir'
         ))
+        $this.EnsureDirPathExists($properties.LogDir)
         $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.Command.Info.log"
         $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.Command.Error.log"
         $process = Start-Process `
@@ -507,42 +458,42 @@ class VRisingServer {
         if ($true -eq $this.IsUpdating()) {
             throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' is currently updating and cannot be started")
         }
-        $this.EnsureLogDirExists()
         $properties = $this.ReadProperties(@(
             'ShortName',
+            'LogDir',
             'InstallDir',
-            'DataDir',
-            'LogDir'
+            'DataDir'
         ))
-        $logFile = "VRisingServer_$((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmss.fffK")).log"
+        $this.EnsureDirPathExists($properties.LogDir)
+        $logFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer_$((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmss.fffK")).log"
         $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastRun.Info.log"
         $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastRun.Error.log"
-        # $process = Start-Process `
-        #     -WindowStyle Hidden `
-        #     -RedirectStandardOutput $stdoutLogFile `
-        #     -RedirectStandardError $stderrLogFile `
-        #     -WorkingDirectory $properties.InstallDir `
-        #     -FilePath '.\VRisingServer.exe' `
-        #     -ArgumentList @(
-        #         '-persistentDataPath', $properties.DataDir,
-        #         '-logFile', $logFile
-        #     ) `
-        #     -PassThru
-        $commandString = @(
-            '$jobDuration = 120;',
-            '$startTime = Get-Date;',
-            'while (((Get-Date) - $startTime).TotalSeconds -le $jobDuration) {',
-                'Write-Host \"Running... (Exiting after $($jobDuration - ([int]((Get-Date) - $startTime).TotalSeconds)) seconds)\";',
-                'Start-Sleep -Seconds 5;',
-            '}'
-        ) -join ' '
         $process = Start-Process `
-            -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
-            -ArgumentList "-Command & { $commandString }" `
             -WindowStyle Hidden `
             -RedirectStandardOutput $stdoutLogFile `
             -RedirectStandardError $stderrLogFile `
+            -WorkingDirectory $properties.InstallDir `
+            -FilePath '.\VRisingServer.exe' `
+            -ArgumentList @(
+                '-persistentDataPath', $properties.DataDir,
+                '-logFile', $logFile
+            ) `
             -PassThru
+        # $commandString = @(
+        #     '$jobDuration = 120;',
+        #     '$startTime = Get-Date;',
+        #     'while (((Get-Date) - $startTime).TotalSeconds -le $jobDuration) {',
+        #         'Write-Host \"Running... (Exiting after $($jobDuration - ([int]((Get-Date) - $startTime).TotalSeconds)) seconds)\";',
+        #         'Start-Sleep -Seconds 5;',
+        #     '}'
+        # ) -join ' '
+        # $process = Start-Process `
+        #     -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+        #     -ArgumentList "-Command & { $commandString }" `
+        #     -WindowStyle Hidden `
+        #     -RedirectStandardOutput $stdoutLogFile `
+        #     -RedirectStandardError $stderrLogFile `
+        #     -PassThru
         $this.WriteProperties(@{
             LogFile = $logFile
             StdoutLogFile = $stdoutLogFile
@@ -592,42 +543,43 @@ class VRisingServer {
         if ($true -eq $this.IsUpdating()) {
             throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' has already started updating")
         }
-        $this.EnsureLogDirExists()
         $properties = $this.ReadProperties(@(
             'ShortName',
-            'LogDir'
+            'LogDir',
+            'InstallDir'
         ))
+        $this.EnsureDirPathExists($properties.LogDir)
         $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastUpdate.Info.log"
         $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastUpdate.Error.log"
-        # $process = Start-Process `
-        #     -FilePath ([VRisingServer]::_config['SteamCmdPath']) `
-        #     -ArgumentList @(
-        #         '+force_install_dir', $this.ReadProperty('InstallDir'),
-        #         '+login', 'anonymous',
-        #         '+app_update', [VRisingServer]::STEAM_APP_ID,
-        #         '+quit'
-        #     ) `
-        #     -WindowStyle Hidden `
-        #     -RedirectStandardOutput  $this.ReadProperty('UpdateStdoutLogFile') `
-        #     -RedirectStandardError $this.ReadProperty('UpdateStderrLogFile') `
-        #     -PassThru
-        $commandString = @(
-            '$jobDuration = 30;',
-            '$startTime = Get-Date;',
-            'while (((Get-Date) - $startTime).TotalSeconds -le $jobDuration) {',
-                'Write-Host \"Running... (Exiting after $($jobDuration - ([int]((Get-Date) - $startTime).TotalSeconds)) seconds)\";',
-                'Start-Sleep -Seconds 5;',
-            '}'
-        ) -join ' '
         $process = Start-Process `
-            -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+            -FilePath ([VRisingServer]::_config['SteamCmdPath']) `
             -ArgumentList @(
-                '-Command', "& { $commandString }"
+                '+force_install_dir', $properties.InstallDir,
+                '+login', 'anonymous',
+                '+app_update', [VRisingServer]::STEAM_APP_ID,
+                '+quit'
             ) `
             -WindowStyle Hidden `
-            -RedirectStandardOutput $stdoutLogFile `
+            -RedirectStandardOutput  $stdoutLogFile `
             -RedirectStandardError $stderrLogFile `
             -PassThru
+        # $commandString = @(
+        #     '$jobDuration = 30;',
+        #     '$startTime = Get-Date;',
+        #     'while (((Get-Date) - $startTime).TotalSeconds -le $jobDuration) {',
+        #         'Write-Host \"Running... (Exiting after $($jobDuration - ([int]((Get-Date) - $startTime).TotalSeconds)) seconds)\";',
+        #         'Start-Sleep -Seconds 5;',
+        #     '}'
+        # ) -join ' '
+        # $process = Start-Process `
+        #     -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+        #     -ArgumentList @(
+        #         '-Command', "& { $commandString }"
+        #     ) `
+        #     -WindowStyle Hidden `
+        #     -RedirectStandardOutput $stdoutLogFile `
+        #     -RedirectStandardError $stderrLogFile `
+        #     -PassThru
         $this.WriteProperties(@{
             UpdateStdoutLogFile = $stdoutLogFile
             UpdateStderrLogFile = $stderrLogFile
@@ -774,10 +726,9 @@ class VRisingServer {
         }
     }
 
-    hidden [void] EnsureLogDirExists() {
-        $logDir = $this.ReadProperty('LogDir')
-        if ($false -eq (Test-Path -LiteralPath $logDir -PathType Container)) {
-            New-Item -Path $logDir -ItemType Directory | Out-Null
+    hidden [void] EnsureDirPathExists([string]$dirPath) {
+        if ($false -eq (Test-Path -LiteralPath $dirPath -PathType Container)) {
+            New-Item -Path $dirPath -ItemType Directory | Out-Null
         }
     }
 

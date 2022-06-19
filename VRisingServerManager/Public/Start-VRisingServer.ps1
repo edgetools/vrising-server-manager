@@ -10,18 +10,16 @@ function Start-VRisingServer {
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
-            try {
-                [VRisingServer]::DoServers('Start', $null, $ShortName)
-            } catch [System.AggregateException] {
-                $_.Exception.InnerExceptions | ForEach-Object { Write-Error $_ }
-                return
-            }
+            $servers = [VRisingServer]::FindServers($ShortName)
         } else {
+            $servers = @($Server)
+        }
+        foreach ($serverItem in $servers) {
             try {
-                $Server.Start()
+                $serverItem.Start()
             } catch [VRisingServerException] {
                 Write-Error $_.Exception
-                return
+                continue
             }
         }
     }

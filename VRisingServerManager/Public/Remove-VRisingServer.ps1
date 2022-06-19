@@ -1,7 +1,7 @@
 using module ..\Class\VRisingServer.psm1
 
 function Remove-VRisingServer {
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName='ByShortName', SupportsShouldProcess, ConfirmImpact='High')]
     param (
         [Parameter(Position=0, ParameterSetName='ByShortName')]
         [string[]] $ShortName,
@@ -14,19 +14,22 @@ function Remove-VRisingServer {
     )
 
     process {
+        if ($Force){
+            $ConfirmPreference = 'None'
+        }
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
-            try {
-                [VRisingServer]::DoServers('Delete', @($Force), $ShortName)
-            } catch [System.AggregateException] {
-                $_.Exception.InnerExceptions | ForEach-Object { Write-Error $_ }
-                return
-            }
+            $servers = [VRisingServer]::FindServers($ShortName)
         } else {
+            $servers = @($Server)
+        }
+        foreach ($serverItem in $servers) {
             try {
-                [VRisingServer]::DeleteServer($Server, $Force)
+                if ($true -eq $PSCmdlet.ShouldProcess($serverItem.ShortName)) {
+                    [VRisingServer]::DeleteServer($serverItem, $Force)
+                }
             } catch [VRisingServerException] {
                 Write-Error $_.Exception
-                return
+                continue
             }
         }
     }

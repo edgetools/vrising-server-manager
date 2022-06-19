@@ -13,18 +13,16 @@ function Stop-VRisingServer {
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
-            try {
-                [VRisingServer]::DoServers('Stop', @($Force), $ShortName)
-            } catch [System.AggregateException] {
-                $_.Exception.InnerExceptions | ForEach-Object { Write-Error $_ }
-                return
-            }
+            $servers = [VRisingServer]::FindServers($ShortName)
         } else {
+            $servers = @($Server)
+        }
+        foreach ($serverItem in $servers) {
             try {
-                $Server.Stop($Force)
+                $serverItem.Stop($Force)
             } catch [VRisingServerException] {
                 Write-Error $_.Exception
-                return
+                continue
             }
         }
     }

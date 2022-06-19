@@ -10,9 +10,17 @@ function Disable-VRisingServer {
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
-            [VRisingServer]::DisableServers($ShortName)
+            $servers = [VRisingServer]::FindServers($ShortName)
         } else {
-            $Server.Disable()
+            $servers = @($Server)
+        }
+        foreach ($serverItem in $servers) {
+            try {
+                $serverItem.Disable()
+            } catch [VRisingServerException] {
+                Write-Error $_.Exception
+                continue
+            }
         }
     }
 }

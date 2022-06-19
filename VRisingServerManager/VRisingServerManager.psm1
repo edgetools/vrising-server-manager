@@ -35,3 +35,4 @@ $Global:PSDefaultParameterValues['Update-VRisingServer:ErrorAction'] = 'Continue
 $Global:PSDefaultParameterValues['Remove-VRisingServer:ErrorAction'] = 'Continue'
 $Global:PSDefaultParameterValues['Enable-VRisingServer:ErrorAction'] = 'Continue'
 $Global:PSDefaultParameterValues['Disable-VRisingServer:ErrorAction'] = 'Continue'
+$Global:PSDefaultParameterValues['Restart-VRisingServer:ErrorAction'] = 'Continue'

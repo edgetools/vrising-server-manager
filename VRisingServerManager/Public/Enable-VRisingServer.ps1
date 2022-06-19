@@ -10,9 +10,17 @@ function Enable-VRisingServer {
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
-            [VRisingServer]::EnableServers($ShortName)
+            $servers = [VRisingServer]::FindServers($ShortName)
         } else {
-            $Server.Enable()
+            $servers = @($Server)
+        }
+        foreach ($serverItem in $servers) {
+            try {
+                $serverItem.Enable()
+            } catch [VRisingServerException] {
+                Write-Error $_.Exception
+                continue
+            }
         }
     }
 }

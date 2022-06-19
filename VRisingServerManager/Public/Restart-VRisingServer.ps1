@@ -1,11 +1,14 @@
-function Update-VRisingServer {
+function Restart-VRisingServer {
     [CmdletBinding(DefaultParameterSetName='ByShortName')]
     param (
         [Parameter(Position=0, ParameterSetName='ByShortName')]
         [string[]] $ShortName,
 
         [Parameter(Position=0, ParameterSetName='ByServer', ValueFromPipeline=$true)]
-        [VRisingServer] $Server
+        [VRisingServer] $Server,
+
+        [Parameter()]
+        [switch] $Force
     )
 
     process {
@@ -16,7 +19,7 @@ function Update-VRisingServer {
         }
         foreach ($serverItem in $servers) {
             try {
-                $serverItem.Update()
+                $serverItem.Restart($Force)
             } catch [VRisingServerException] {
                 Write-Error $_.Exception
                 continue
@@ -25,4 +28,4 @@ function Update-VRisingServer {
     }
 }
 
-Register-ArgumentCompleter -CommandName Update-VRisingServer -ParameterName ShortName -ScriptBlock $function:ServerShortNameArgumentCompleter
+Register-ArgumentCompleter -CommandName Restart-VRisingServer -ParameterName ShortName -ScriptBlock $function:ServerShortNameArgumentCompleter
