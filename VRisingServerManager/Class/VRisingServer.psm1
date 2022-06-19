@@ -1,4 +1,5 @@
 using module .\VRisingServerLog.psm1
+using module .\VRisingServerException.psm1
 
 $ErrorActionPreference = 'Stop'
 
@@ -272,7 +273,7 @@ class VRisingServer {
         $serverProperties = @{
             ShortName = $ShortName
 
-            Enabled = $true
+            Enabled = $false
             UpdateOnStartup = $true
 
             DataDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath $ShortName |
@@ -293,112 +294,80 @@ class VRisingServer {
             UpdateStdoutLogFile = $null
             UpdateStderrLogFile = $null
 
+            CommandType = $null
             CommandProcessId = 0
             CommandStdoutLogFile = $null
             CommandStderrLogFile = $null
+            CommandFinished = $null
         }
         $server.WriteProperties($serverProperties)
         [VRisingServerLog]::Info("Created server '$($ShortName)'")
     }
 
-    static hidden [void] StartServers([string[]]$searchKeys) {
+    static hidden [void] DoServers([string]$doCommandName, [psobject[]]$doCommandArgs, [string[]]$searchKeys) {
         $servers = [VRisingServer]::FindServers($searchKeys)
-        foreach ($server in $servers) {
-            $server.Start()
-        }
+        [VRisingServer]::DoServers($doCommandName, $doCommandArgs, $servers)
     }
 
-    static hidden [void] StartServers([string]$searchKey) {
+    static hidden [void] DoServers([string]$doCommandName, [psobject[]]$doCommandArgs, [string]$searchKey) {
         $servers = [VRisingServer]::FindServers($searchKey)
+        [VRisingServer]::DoServers($doCommandName, $doCommandArgs, $servers)
+    }
+
+    static hidden [void] DoServers([string]$doCommandName, [psobject[]]$doCommandArgs, [VRisingServer[]]$servers) {
+        $exceptions = [System.Collections.ArrayList]::New()
         foreach ($server in $servers) {
-            $server.Start()
+            try {
+                switch($doCommandName) {
+                    'Start' {
+                        $server.Start()
+                        break
+                    }
+                    'Stop' {
+                        $server.Stop($doCommandArgs[0])
+                        break
+                    }
+                    'Update' {
+                        $server.Update()
+                        break
+                    }
+                    'Delete' {
+                        [VRisingServer]::DeleteServer($server, $doCommandArgs[0])
+                        break
+                    }
+                    'Enable' {
+                        $server.Enable()
+                        break
+                    }
+                    'Disable' {
+                        $server.Disable()
+                        break
+                    }
+                }
+            } catch [VRisingServerException] {
+                $exceptions.Add($_.Exception)
+            }
         }
-    }
-
-    static hidden [void] StopServers([string[]]$searchKeys, [bool]$force) {
-        $servers = [VRisingServer]::FindServers($searchKeys)
-        foreach ($server in $servers) {
-            $server.Stop($force)
-        }
-    }
-
-    static hidden [void] StopServers([string]$searchKey, [bool]$force) {
-        $servers = [VRisingServer]::FindServers($searchKey)
-        foreach ($server in $servers) {
-            $server.Stop($force)
-        }
-    }
-
-    static hidden [void] UpdateServers([string[]]$searchKeys) {
-        $servers = [VRisingServer]::FindServers($searchKeys)
-        foreach ($server in $servers) {
-            $server.Update()
-        }
-    }
-
-    static hidden [void] UpdateServers([string]$searchKey) {
-        $servers = [VRisingServer]::FindServers($searchKey)
-        foreach ($server in $servers) {
-            $server.Update()
-        }
-    }
-
-    static hidden [void] DeleteServers([string[]]$searchKeys, [bool]$force) {
-        $serversToDelete = [VRisingServer]::FindServers($searchKeys)
-        foreach ($serverToDelete in $serversToDelete) {
-            [VRisingServer]::DeleteServer($serverToDelete, $force)
-        }
-    }
-
-    static hidden [void] DeleteServers([string]$searchKey, [bool]$force) {
-        $serversToDelete = [VRisingServer]::FindServers($searchKey)
-        foreach ($serverToDelete in $serversToDelete) {
-            [VRisingServer]::DeleteServer($serverToDelete, $force)
-        }
-    }
-
-    static hidden [void] EnableServers([string[]]$searchKeys) {
-        $servers = [VRisingServer]::FindServers($searchKeys)
-        foreach ($server in $servers) {
-            $server.Enable()
-        }
-    }
-
-    static hidden [void] EnableServers([string]$searchKey) {
-        $servers = [VRisingServer]::FindServers($searchKey)
-        foreach ($server in $servers) {
-            $server.Enable()
-        }
-    }
-
-    static hidden [void] DisableServers([string[]]$searchKeys) {
-        $servers = [VRisingServer]::FindServers($searchKeys)
-        foreach ($server in $servers) {
-            $server.Disable()
-        }
-    }
-
-    static hidden [void] DisableServers([string]$searchKey) {
-        $servers = [VRisingServer]::FindServers($searchKey)
-        foreach ($server in $servers) {
-            $server.Disable()
+        if ($exceptions.Count -gt 0) {
+            throw [System.AggregateException]::New($exceptions)
         }
     }
 
     static hidden [void] DeleteServer([VRisingServer]$server, [bool]$force) {
         if (($true -eq $server.CommandIsRunning()) -and ($false -eq $force)) {
-            throw "Cannot remove server '$($server.ReadProperty('ShortName'))' while it is busy trying to $($server.ReadProperty('CommandType')) -- wait for command to complete first or use force to override"
+            throw [VRisingServerException]::New($($server.ReadProperty('ShortName')), "Cannot remove server '$($server.ReadProperty('ShortName'))' while it is busy trying to $($server.ReadProperty('CommandType')) -- wait for command to complete first or use force to override")
         }
         if (($true -eq $server.IsRunning()) -and ($false -eq $force)) {
-            throw "Cannot remove server '$($server.ReadProperty('ShortName'))' while it is running -- stop first or use force to override"
+            throw [VRisingServerException]::New($($server.ReadProperty('ShortName')), "Cannot remove server '$($server.ReadProperty('ShortName'))' while it is running -- stop first or use force to override")
         }
         if (($true -eq $server.IsUpdating()) -and ($false -eq $force)) {
-            throw "Cannot remove server '$($server.ReadProperty('ShortName'))' while it is updating -- wait for update to complete or use force to override"
+            throw [VRisingServerException]::New($($server.ReadProperty('ShortName')), "Cannot remove server '$($server.ReadProperty('ShortName'))' while it is updating -- wait for update to complete or use force to override")
         }
+        $shortName = $($server.ReadProperty('ShortName'))
         if ($true -eq (Test-Path -LiteralPath $server._filePath -PathType Leaf)) {
             Remove-Item -LiteralPath $server._filePath
         }
-        [VRisingServerLog]::Info("Removed server '$($server.ReadProperty('ShortName'))'")
+        [VRisingServerLog]::Info("Removed server '$shortName'")
     }
 
     static hidden [string[][]] ReadServerLogType([string[]]$searchKey, [VRisingServerLogType]$logType, [int]$last) {
@@ -466,10 +435,10 @@ class VRisingServer {
 
     [void] KillUpdate([bool]$force) {
         if ($true -eq $this.CommandIsRunning()) {
-            throw "Server '$($this.ReadProperty('ShortName'))' is busy trying to $($this.ReadProperty('CommandType'))"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' is busy trying to $($this.ReadProperty('CommandType'))")
         }
         if ($false -eq $this.IsUpdating()) {
-            throw "Server '$($this.ReadProperty('ShortName'))' is not currently updating"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' is not currently updating")
         }
         if ($true -eq $force) {
             [VRisingServerLog]::Info("Forcefully stopping update process for '$($this.ReadProperty('ShortName'))'")
@@ -481,7 +450,7 @@ class VRisingServer {
 
     [void] KillCommand([bool]$force) {
         if ($false -eq $this.CommandIsRunning()) {
-            throw "Server '$($this.ReadProperty('ShortName'))' is not currently running a command"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' is not currently running a command")
         }
         if ($true -eq $force) {
             [VRisingServerLog]::Info("Forcefully stopping $($this.ReadProperty('CommandType')) process for '$($this.ReadProperty('ShortName'))'")
@@ -493,10 +462,10 @@ class VRisingServer {
 
     hidden [void] DoCommand([string]$commandType, [string]$commandString) {
         if ($false -eq $this.IsEnabled()) {
-            throw "Server '$($this.ReadProperty('ShortName'))' is currently Disabled"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' is currently Disabled")
         }
         if ($true -eq $this.CommandIsRunning()) {
-            throw "Server '$($this.ReadProperty('ShortName'))' is busy trying to $($this.ReadProperty('CommandType'))"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' is busy trying to $($this.ReadProperty('CommandType'))")
         }
         $this.EnsureLogDirExists()
         $properties = $this.ReadProperties(@(
@@ -533,10 +502,10 @@ class VRisingServer {
 
     hidden [void] DoStart() {
         if ($true -eq $this.IsRunning()) {
-            throw "Server '$($this.ReadProperty('ShortName'))' already running"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' already running")
         }
         if ($true -eq $this.IsUpdating()) {
-            throw "Server '$($this.ReadProperty('ShortName'))' is currently updating and cannot be started"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' is currently updating and cannot be started")
         }
         $this.EnsureLogDirExists()
         $properties = $this.ReadProperties(@(
@@ -596,7 +565,7 @@ class VRisingServer {
 
     hidden [void] DoStop([bool]$force) {
         if ($false -eq $this.IsRunning()) {
-            throw "Server '$($this.ReadProperty('ShortName'))' already stopped"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' already stopped")
         }
         if ($true -eq $force) {
             [VRisingServerLog]::Info("Forcefully stopping server '$($this.ReadProperty('ShortName'))'")
@@ -618,10 +587,10 @@ class VRisingServer {
 
     hidden [void] DoUpdate() {
         if ($true -eq $this.IsRunning()) {
-            throw "Server '$($this.ReadProperty('ShortName'))' must be stopped before updating"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' must be stopped before updating")
         }
         if ($true -eq $this.IsUpdating()) {
-            throw "Server '$($this.ReadProperty('ShortName'))' has already started updating"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Server '$($this.ReadProperty('ShortName'))' has already started updating")
         }
         $this.EnsureLogDirExists()
         $properties = $this.ReadProperties(@(
@@ -683,7 +652,7 @@ class VRisingServer {
                 [VRisingServerLog]::Info("Waiting on server '$shortName' to stop ($stopTimeout second timeout)...")
                 $process | Wait-Process -Timeout $stopTimeout -ErrorAction Stop
             } catch [System.TimeoutException] {
-                throw "Exceeded timeout waiting for server '$shortName' to stop"
+                throw [VRisingServerException]::New($shortName, "Exceeded timeout waiting for server '$shortName' to stop")
             }
             [VRisingServerLog]::Info("Server '$shortName' has stopped")
         }
@@ -698,13 +667,13 @@ class VRisingServer {
 
     [void] Disable() {
         if ($true -eq $this.CommandIsRunning()) {
-            throw "Cannot disable server '$($this.ReadProperty('ShortName'))' while it is busy trying to $($this.ReadProperty('CommandType'))"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Cannot disable server '$($this.ReadProperty('ShortName'))' while it is busy trying to $($this.ReadProperty('CommandType'))")
         }
         if ($true -eq $this.IsRunning()) {
-            throw "Cannot disable server '$($this.ReadProperty('ShortName'))' while it is running"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Cannot disable server '$($this.ReadProperty('ShortName'))' while it is running")
         }
         if ($true -eq $this.IsUpdating()) {
-            throw "Cannot disable server '$($this.ReadProperty('ShortName'))' while it is updating"
+            throw [VRisingServerException]::New($($this.ReadProperty('ShortName')), "Cannot disable server '$($this.ReadProperty('ShortName'))' while it is updating")
         }
         $this.WriteProperty('Enabled', $false)
         [VRisingServerLog]::Info("Disabled server '$($this.ReadProperty('ShortName'))'")
@@ -776,8 +745,10 @@ class VRisingServer {
             return 'Executing'
         } elseif ($this.ReadProperty('CommandFinished') -eq $true) {
             return 'OK'
-        } else {
+        } elseif ($this.ReadProperty('CommandFinished') -eq $false) {
             return 'Error'
+        } else {
+            return 'Unknown'
         }
     }
 

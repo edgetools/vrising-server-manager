@@ -15,9 +15,19 @@ function Remove-VRisingServer {
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
-            [VRisingServer]::DeleteServers($ShortName, $Force)
+            try {
+                [VRisingServer]::DoServers('Delete', @($Force), $ShortName)
+            } catch [System.AggregateException] {
+                $_.Exception.InnerExceptions | ForEach-Object { Write-Error $_ }
+                return
+            }
         } else {
-            [VRisingServer]::DeleteServer($Server, $Force)
+            try {
+                [VRisingServer]::DeleteServer($Server, $Force)
+            } catch [VRisingServerException] {
+                Write-Error $_.Exception
+                return
+            }
         }
     }
 }

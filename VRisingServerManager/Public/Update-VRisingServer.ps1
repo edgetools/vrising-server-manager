@@ -10,9 +10,19 @@ function Update-VRisingServer {
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
-            [VRisingServer]::UpdateServers($ShortName)
+            try {
+                [VRisingServer]::DoServers('Update', $null, $ShortName)
+            } catch [System.AggregateException] {
+                $_.Exception.InnerExceptions | ForEach-Object { Write-Error $_ }
+                return
+            }
         } else {
-            $Server.Update()
+            try {
+                $Server.Update()
+            } catch [VRisingServerException] {
+                Write-Error $_.Exception
+                return
+            }
         }
     }
 }
