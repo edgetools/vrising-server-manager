@@ -28,10 +28,10 @@
                 <PropertyName>Uptime</PropertyName>
               </TableColumnItem>
               <TableColumnItem>
-                <PropertyName>Command</PropertyName>
+                <PropertyName>LastCommand</PropertyName>
               </TableColumnItem>
               <TableColumnItem>
-                <PropertyName>CommandStatus</PropertyName>
+                <PropertyName>LastCommandStatus</PropertyName>
               </TableColumnItem>
               <TableColumnItem>
                 <PropertyName>LastUpdate</PropertyName>

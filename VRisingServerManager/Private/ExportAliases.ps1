@@ -12,6 +12,7 @@ function ExportAliases {
         vrenable = 'Enable-VRisingServer'
         vrdisable = 'Disable-VRisingServer'
         vrrestart = 'Restart-VRisingServer'
+        vrset = 'Set-VRisingServer'
     }
     foreach ($commandAlias in $commandAliases.GetEnumerator()) {
         New-Alias -Value $commandAlias.Value -Name $commandAlias.Key -Scope Script

@@ -1,5 +1,6 @@
 using module .\VRisingServerLog.psm1
 using module .\VRisingServerException.psm1
+using module .\VRisingServerSettingsMap.psm1
 
 $ErrorActionPreference = 'Stop'
 
@@ -11,6 +12,12 @@ enum VRisingServerLogType {
     UpdateError
     Command
     CommandError
+}
+
+enum VRisingServerSettingsType {
+    Host
+    Game
+    Voip
 }
 
 class VRisingServer {
@@ -37,13 +44,15 @@ class VRisingServer {
             -TypeName "VRisingServer" `
             -MemberName SaveName `
             -MemberType ScriptProperty `
-            -Value { return $this.ReadHostSetting('SaveName') } `
+            -Value { return $this.GetHostSetting('SaveName') } `
+            -SecondValue { param($value) $this.SetHostSetting('SaveName',  $value) } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName DisplayName `
             -MemberType ScriptProperty `
-            -Value { return $this.ReadHostSetting('Name') } `
+            -Value { return $this.GetHostSetting('Name') } `
+            -SecondValue { param($value) $this.SetHostSetting('Name',  $value) } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -53,13 +62,13 @@ class VRisingServer {
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
-            -MemberName Command `
+            -MemberName LastCommand `
             -MemberType ScriptProperty `
             -Value { return $this.ReadProperty('CommandType') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
-            -MemberName CommandStatus `
+            -MemberName LastCommandStatus `
             -MemberType ScriptProperty `
             -Value { return $this.GetCommandStatus() } `
             -Force
@@ -169,7 +178,7 @@ class VRisingServer {
         if ($false -eq (Test-Path -LiteralPath ([VRisingServer]::_configFilePath) -PathType Leaf)) {
             return
         }
-        $configFileContents = Get-Content -Path ([VRisingServer]::_configFilePath) | ConvertFrom-Json
+        $configFileContents = Get-Content -Raw -LiteralPath ([VRisingServer]::_configFilePath) | ConvertFrom-Json
         if ($true -eq ($configFileContents.PSObject.Properties.Name -contains 'DefaultServerDir')) {
             [VRisingServer]::_config['DefaultServerDir'] = $configFileContents.DefaultServerDir
         }
@@ -258,7 +267,7 @@ class VRisingServer {
     }
 
     static hidden [VRisingServer] LoadServer([string]$filePath) {
-        $serverFileContents = Get-Content -LiteralPath $filePath | ConvertFrom-Json
+        $serverFileContents = Get-Content -Raw -LiteralPath $filePath | ConvertFrom-Json
         if (($false -eq ($serverFileContents.PSObject.Properties.Name -contains 'ShortName')) -or
                 ([string]::IsNullOrWhiteSpace($serverFileContents.ShortName))) {
             throw "Failed loading server file at $filePath -- ShortName is missing or empty"
@@ -326,6 +335,43 @@ class VRisingServer {
         [VRisingServerLog]::Info("Removed server '$shortName'")
     }
 
+    static hidden [psobject[]] GetSuggestedSettingsValues(
+        [VRisingServerSettingsType]$settingsType,
+        [string]$shortName,
+        [string]$settingName,
+        [string]$settingValueSearchKey) {
+    # take type
+    # lookup name in type map
+    # if value type (from map) is a collection type (has multiple known values):
+    # - return collection matching input, sorted preferring input
+    # - e.g. Host ListOnMasterServer '' -> True / False
+    #        Host ListOnMasterServer 'Fa' -> False / True
+    # if value type is not a collection type (has multiple known values):
+    # - reach into settings
+    # - extract the current value matching input
+    # - e.g. Host AutoSaveCount '' -> 50
+    #        Host AutoSaveCount 5 -> 50
+    $mapResults = [VRisingServerSettingsMap]::Get($settingsType, $settingName)
+    if (($null -ne $mapResults) -and ($mapResults.Count -gt 0)) {
+        # sort array results by those like result
+        $sortedMapResults = [System.Collections.ArrayList]::New()
+        foreach ($mapResult in $mapResults) {
+            if ($mapResult -like "$settingValueSearchKey*") {
+                $sortedMapResults.Insert(0, $mapResult)
+            } else {
+                $sortedMapResults.Add($mapResult)
+            }
+        }
+        return $sortedMapResults.ToArray()
+    }
+    # value does not have known values, try to grab current value from server instead
+    if ([string]::IsNullOrEmpty($shortName)) {
+        return $null
+    }
+    $server = [VRisingServer]::GetServer($shortName)
+    return $server.GetSettingsTypeValue($settingsType, $settingName)
+}
+
     # instance variables
     hidden [string] $_filePath
 
@@ -364,18 +410,6 @@ class VRisingServer {
         } else {
             return $false
         }
-    }
-
-    [PSCustomObject] GetHostSettings() {
-        return $this.ReadSettingsFile($this.GetHostSettingsFilePath())
-    }
-
-    [PSCustomObject] GetGameSettings() {
-        return $this.ReadSettingsFile($this.GetGameSettingsFilePath())
-    }
-
-    [PSCustomObject] GetVoipSettings() {
-        return $this.ReadSettingsFile($this.GetVoipSettingsFilePath())
     }
 
     [void] KillUpdate([bool]$force) {
@@ -556,7 +590,7 @@ class VRisingServer {
                 '+quit'
             ) `
             -WindowStyle Hidden `
-            -RedirectStandardOutput  $stdoutLogFile `
+            -RedirectStandardOutput $stdoutLogFile `
             -RedirectStandardError $stderrLogFile `
             -PassThru
         # $commandString = @(
@@ -627,8 +661,26 @@ class VRisingServer {
         [VRisingServerLog]::Info("Disabled server '$($this.ReadProperty('ShortName'))'")
     }
 
+    hidden [string] GetDefaultSettingsDirPath() {
+        return Join-Path -Path $this.ReadProperty('InstallDir') -ChildPath 'VRisingServer_Data' |
+            Join-Path -ChildPath 'StreamingAssets' |
+            Join-Path -ChildPath 'Settings'
+    }
+
     hidden [string] GetSettingsDirPath() {
         return Join-Path -Path $this.ReadProperty('DataDir') -ChildPath ([VRisingServer]::SETTINGS_DIR_NAME)
+    }
+
+    hidden [string] GetSavesDirPath() {
+        return Join-Path -Path $this.ReadProperty('DataDir') -ChildPath ([VRisingServer]::SAVES_DIR_NAME)
+    }
+
+    hidden [string] GetDefaultHostSettingsFilePath() {
+        return Join-Path -Path $this.GetDefaultSettingsDirPath() -ChildPath 'ServerHostSettings.json'
+    }
+
+    hidden [string] GetDefaultGameSettingsFilePath() {
+        return Join-Path -Path $this.GetDefaultSettingsDirPath() -ChildPath 'ServerGameSettings.json'
     }
 
     hidden [string] GetHostSettingsFilePath() {
@@ -643,18 +695,39 @@ class VRisingServer {
         return Join-Path -Path $this.GetSettingsDirPath() -ChildPath 'ServerVoipSettings.json'
     }
 
-    hidden [string] GetSavesDirPath() {
-        return Join-Path -Path $this.ReadProperty('DataDir') -ChildPath ([VRisingServer]::SAVES_DIR_NAME)
+    hidden [PSCustomObject] GetDefaultHostSettingsFile() {
+        return $this.ReadSettingsFile($this.GetDefaultHostSettingsFilePath())
     }
 
-    hidden [string] ReadHostSetting([string]$name) {
-        $serverHostSettings = $this.GetHostSettings()
-        if ($null -ne $serverHostSettings) {
-            if ($serverHostSettings.PSObject.Properties.Name -contains $name) {
-                return $serverHostSettings.$name
-            }
+    hidden [PSCustomObject] GetDefaultGameSettingsFile() {
+        return $this.ReadSettingsFile($this.GetDefaultGameSettingsFilePath())
+    }
+
+    hidden [PSCustomObject] GetDefaultVoipSettingsFile() {
+        return [PSCustomObject]@{
+            VOIPEnabled = $false
+            VOIPIssuer = $null
+            VOIPSecret = $null
+            VOIPAppUserId = $null
+            VOIPAppUserPwd = $null
+            VOIPVivoxDomain = $null
+            VOIPAPIEndpoint = $null
+            VOIPConversationalDistance = $null
+            VOIPAudibleDistance = $null
+            VOIPFadeIntensity = $null
         }
-        return $null
+    }
+
+    hidden [PSCustomObject] GetHostSettingsFile() {
+        return $this.ReadSettingsFile($this.GetHostSettingsFilePath())
+    }
+
+    hidden [PSCustomObject] GetGameSettingsFile() {
+        return $this.ReadSettingsFile($this.GetGameSettingsFilePath())
+    }
+
+    hidden [PSCustomObject] GetVoipSettingsFile() {
+        return $this.ReadSettingsFile($this.GetVoipSettingsFilePath())
     }
 
     hidden [string] GetStatus() {
@@ -770,7 +843,7 @@ class VRisingServer {
         if ($false -eq (Test-Path -LiteralPath $this._filePath -PathType Leaf)) {
             return $null
         }
-        $fileContent = Get-Content $this._filePath | ConvertFrom-Json
+        $fileContent = Get-Content -Raw -LiteralPath $this._filePath | ConvertFrom-Json
         $properties = [hashtable]@{}
         foreach ($name in $names) {
             if ($fileContent.PSObject.Properties.Name -contains $name) {
@@ -792,22 +865,25 @@ class VRisingServer {
             # create it
             New-Item -Path $serverFileDir -ItemType Directory | Out-Null
         }
-        $this._propertiesFileMutex.WaitOne()
-        # check if file exists
-        if ($true -eq (Test-Path -LiteralPath $this._filePath -PathType Leaf)) {
-            $fileContent = Get-Content $this._filePath | ConvertFrom-Json
-        } else {
-            $fileContent = [PSCustomObject]@{}
-        }
-        foreach ($nameValue in $nameValues.GetEnumerator()) {
-            if ($fileContent.PSObject.Properties.Name -contains $nameValue.Name) {
-                $fileContent.$($nameValue.Name) = $nameValue.Value
+        try {
+            $this._propertiesFileMutex.WaitOne()
+            # check if file exists
+            if ($true -eq (Test-Path -LiteralPath $this._filePath -PathType Leaf)) {
+                $fileContent = Get-Content -Raw -LiteralPath $this._filePath | ConvertFrom-Json
             } else {
-                $fileContent | Add-Member -MemberType NoteProperty -Name $nameValue.Name -Value $nameValue.Value
+                $fileContent = [PSCustomObject]@{}
             }
+            foreach ($nameValue in $nameValues.GetEnumerator()) {
+                if ($fileContent.PSObject.Properties.Name -contains $nameValue.Name) {
+                    $fileContent.$($nameValue.Name) = $nameValue.Value
+                } else {
+                    $fileContent | Add-Member -MemberType NoteProperty -Name $nameValue.Name -Value $nameValue.Value
+                }
+            }
+            $fileContent | ConvertTo-Json | Out-File -LiteralPath $this._filePath
+        } finally {
+            $this._propertiesFileMutex.ReleaseMutex()
         }
-        $fileContent | ConvertTo-Json | Out-File -LiteralPath $this._filePath
-        $this._propertiesFileMutex.ReleaseMutex()
     }
 
     hidden [void] WriteSettingsFile() {
@@ -845,6 +921,390 @@ class VRisingServer {
                 throw $_
             }
         }
+    }
+
+    hidden [string[]] FindSettingsTypeKeys([VRisingServerSettingsType]$settingsType, [string]$searchKey) {
+        $settings = $null
+        switch ($settingsType) {
+            ([VRisingServerSettingsType]::Host) {
+                $settings = $this.GetDefaultHostSettingsFile()
+                break
+            }
+            ([VRisingServerSettingsType]::Game) {
+                $settings = $this.GetDefaultGameSettingsFile()
+                break
+            }
+            ([VRisingServerSettingsType]::Voip) {
+                $settings = $this.GetDefaultVoipSettingsFile()
+                break
+            }
+        }
+        return $this.FindSettingsKeys($settings, $searchKey)
+    }
+
+    hidden [string[]] FindSettingsKeys([pscustomobject]$settings, [string]$searchKey) {
+        $splitSearchKey = $searchKey -split '\.'
+        $addPrefix = $false
+        $prefix = $null
+        $properties = $null
+        if ([string]::IsNullOrEmpty($splitSearchKey)) {
+            $properties = $settings.PSObject.Properties
+        } elseif ($splitSearchKey.Count -eq 1) {
+            $properties = $settings.PSObject.Properties | Where-Object { $_.Name -like "$searchKey*" }
+        } elseif ($splitSearchKey.Count -gt 1) {
+            # loop into the settings object
+            # based on the number of segments to the search key
+            $subSettings = $settings
+            for ($i = 0; $i -lt $splitSearchKey.Count; $i++) {
+                if ($i -eq ($splitSearchKey.Count - 1)) {
+                    # last item
+                } else {
+                    if ($subSettings.PSObject.Properties.Name -notcontains $splitSearchKey[$i]) {
+                        # invalid sub key (given foo.bar, foo does not exist)
+                        return $null
+                    }
+                    if ($i -eq 0) {
+                        # first item
+                        $prefix = $subSettings.PSObject.Properties[$splitSearchKey[$i]].Name
+                    } else {
+                        $prefix += ".$($subSettings.PSObject.Properties[$splitSearchKey[$i]].Name)"
+                    }
+                    $subSettings = $subSettings.PSObject.Properties[$splitSearchKey[$i]].Value
+                }
+            }
+            if ($true -eq [string]::IsNullOrEmpty($splitSearchKey[-1])) {
+                # last segment is empty: "foo.bar."
+                # return all subSettings keys
+                $properties = $subSettings.PSObject.Properties
+            } else {
+                # last segment not empty: "foo.bar.baz"
+                # return just subSettings keys matching searchKey
+                $properties = $subSettings.PSObject.Properties | Where-Object { $_.Name -like "$($splitSearchKey[-1])*" }
+            }
+            $addPrefix = $true
+        }
+        # return prefixed Names from properties, but suffix them only if they're a container (psobject)
+        return $properties | ForEach-Object {
+            $private:keyName = $_.Name
+            if ($_.TypeNameOfValue -eq 'System.Management.Automation.PSCustomObject') {
+                $private:keyName = "$($private:keyName)."
+            }
+            if ($true -eq $addPrefix) {
+                $private:keyName = "$prefix.$($private:keyName)"
+            }
+            $private:keyName
+        }
+    }
+
+    hidden [psobject] GetSetting([psobject]$settings, [string]$settingName) {
+        if ($null -eq $settings) {
+            return $null
+        }
+        $settingNameSegments = $settingName -split '\.'
+        $settingContainer = $settings
+        # loop into the object
+        # based on the number of segments to the path
+        for ($i = 0; $i -lt $settingNameSegments.Count; $i++) {
+            if ($i -eq ($settingNameSegments.Count - 1)) {
+                # last item
+                if ($settingContainer.PSObject.Properties.Name -notcontains $settingNameSegments[$i]) {
+                    return $null
+                }
+            } else {
+                if ($null -eq $settingContainer) {
+                    # parent pointed to a null value
+                    return $null
+                }
+                if ($settingContainer.PSObject.Properties.Name -notcontains $settingNameSegments[$i]) {
+                    # missing sub key (given foo.bar, foo does not exist)
+                    return $null
+                }
+                $settingContainer = $settingContainer.PSObject.Properties[$settingNameSegments[$i]].Value
+            }
+        }
+        return $settingContainer.PSObject.Properties[$settingNameSegments[-1]].Value
+    }
+
+    hidden [void] DeleteSetting([psobject]$settings, [string]$settingName) {
+        if ($null -eq $settings) {
+            return
+        }
+        $settingNameSegments = $settingName -split '\.'
+        $settingContainer = $settings
+        # loop into the object
+        # based on the number of segments to the path
+        for ($i = 0; $i -lt $settingNameSegments.Count; $i++) {
+            if ($i -eq ($settingNameSegments.Count - 1)) {
+                # last item
+                if ($settingContainer.PSObject.Properties.Name -contains $settingNameSegments[$i]) {
+                    $settingContainer.PSObject.Properties.Remove($settingNameSegments[$i])
+                }
+            } else {
+                if ($null -eq $settingContainer) {
+                    # parent pointed to a null value
+                    return
+                }
+                if ($settingContainer.PSObject.Properties.Name -notcontains $settingNameSegments[$i]) {
+                    # missing sub key (given foo.bar, foo does not exist)
+                    return
+                }
+                $settingContainer = $settingContainer.PSObject.Properties[$settingNameSegments[$i]].Value
+            }
+        }
+        return
+    }
+
+    # returns the modified (or new) settings object
+    hidden [psobject] SetSetting([psobject]$settings, [string]$settingName, [psobject]$settingValue) {
+        if ($null -eq $settings) {
+            $settings = [PSCustomObject]@{}
+        }
+        $settingNameSegments = $settingName -split '\.'
+        $settingContainer = $settings
+        # loop into the object
+        # based on the number of segments to the path
+        for ($i = 0; $i -lt $settingNameSegments.Count; $i++) {
+            if ($i -eq ($settingNameSegments.Count - 1)) {
+                # last item
+                if ($settingContainer.PSObject.Properties.Name -notcontains $settingNameSegments[$i]) {
+                    $settingContainer | Add-Member `
+                        -MemberType NoteProperty `
+                        -Name $settingNameSegments[$i] `
+                        -Value $settingValue
+                }
+            } else {
+                if ($settingContainer.PSObject.Properties.Name -notcontains $settingNameSegments[$i]) {
+                    # missing sub key (given foo.bar, foo does not exist)
+                    # add the missing key
+                    $settingContainer | Add-Member `
+                        -MemberType NoteProperty `
+                        -Name $settingNameSegments[$i] `
+                        -Value ([PSCustomObject]@{})
+                }
+                $settingContainer = $settingContainer.PSObject.Properties[$settingNameSegments[$i]].Value
+            }
+        }
+        return $settings
+    }
+
+    # take a source object and merge an overlay on top of it
+    # does not clone, modifies any objects passed by reference
+    hidden [void] MergePSObjects([psobject]$sourceObject, [psobject]$overlay) {
+        if ($null -eq $overlay) {
+            return
+        }
+        if ($null -eq $sourceObject) {
+            $sourceObject = $overlay
+        }
+        # iterate through the properties on the overlay
+        $overlay.PSObject.Properties | ForEach-Object {
+            $currentProperty = $_
+            # if the sourceobject does NOT contain that property, just assign it from the overlay
+            if ($sourceObject.PSObject.Properties.Name -notcontains $currentProperty.Name) {
+                $sourceObject | Add-Member `
+                    -MemberType NoteProperty `
+                    -Name $currentProperty.Name `
+                    -Value $currentProperty.Value
+            }
+            # if the sourceobject DOES contain that property, check first if it's a container (psobject)
+            switch ($currentProperty.TypeNameOfValue) {
+                'System.Management.Automation.PSCustomObject' {
+                    # if it's a container, call this function on those subobjects (recursive)
+                    $this.MergePSObjects($sourceObject.PSObject.Properties[$currentProperty.Name].Value, $currentProperty.Value)
+                    break
+                }
+                Default {
+                    # if it's NOT a container, just overlay the value directly on top of it
+                    $sourceObject | Add-Member `
+                        -MemberType NoteProperty `
+                        -Name $currentProperty.Name `
+                        -Value $currentProperty.Value `
+                        -Force
+                    break
+                }
+            }
+        }
+    }
+
+    hidden [psobject] GetSettingsTypeValue([VRisingServerSettingsType]$settingsType, [string]$settingName) {
+        $defaultSettings = $null
+        $explicitSettings = $null
+        switch ($settingsType) {
+            ([VRisingServerSettingsType]::Host) {
+                $defaultSettings = $this.GetDefaultHostSettingsFile()
+                $explicitSettings = $this.GetHostSettingsFile()
+                break
+            }
+            ([VRisingServerSettingsType]::Game) {
+                $defaultSettings = $this.GetDefaultGameSettingsFile()
+                $explicitSettings = $this.GetGameSettingsFile()
+                break
+            }
+            ([VRisingServerSettingsType]::Voip) {
+                $defaultSettings = $this.GetDefaultVoipSettingsFile()
+                $explicitSettings = $this.GetVoipSettingsFile()
+                break
+            }
+        }
+        if ([string]::IsNullOrWhiteSpace($settingName)) {
+            $this.MergePSObjects($defaultSettings, $explicitSettings)
+            return $defaultSettings
+        } else {
+            $explicitValue = $this.GetSetting($explicitSettings, $settingName)
+            $defaultValue = $this.GetSetting($defaultSettings, $settingName)
+            if ($null -ne $explicitValue) {
+                if ($explicitValue -is [System.Management.Automation.PSCustomObject]) {
+                    $this.MergePSObjects($defaultValue, $explicitValue)
+                    return $defaultValue
+                } else {
+                    return $explicitValue
+                }
+            } else {
+                return $defaultValue
+            }
+        }
+    }
+
+    [psobject] GetHostSetting([string]$settingName) {
+        return $this.GetSettingsTypeValue([VRisingServerSettingsType]::Host, $settingName)
+    }
+
+    [psobject] GetGameSetting([string]$settingName) {
+        return $this.GetSettingsTypeValue([VRisingServerSettingsType]::Game, $settingName)
+    }
+
+    [psobject] GetVoipSetting([string]$settingName) {
+        return $this.GetSettingsTypeValue([VRisingServerSettingsType]::Voip, $settingName)
+    }
+
+    hidden [bool] ObjectsAreEqual([psobject]$a, [psobject]$b) {
+        # simple dumbed down recursive comparison function
+        # specifically for comparing values inside the [pscustomobject] from a loaded settings file
+        # does not handle complex types
+        $a_type = $a.GetType().Name
+        $b_type = $b.GetType().Name
+        if ($a_type -ne $b_type) {
+            return $false
+        }
+        switch ($a_type) {
+            'PSCustomObject' {
+                foreach ($property in $a.PSObject.Properties.GetEnumerator()) {
+                    if ($b.PSObject.Properties.Name -notcontains $property.Name) {
+                        return $false
+                    }
+                    $a_value = $property.Value
+                    $b_value = $b.PSObject.Properties[$property.Name].Value
+                    $expectedComparables = @(
+                        'System.Boolean',
+                        'System.Int32',
+                        'System.String')
+                    switch ($property.TypeNameOfValue) {
+                        'System.Object' {
+                            if ($false -eq $this.ObjectsAreEqual($a_value, $b_value)) {
+                                return $false
+                            }
+                            continue
+                        }
+                        { $_ -in $expectedComparables } {
+                            if ($a_value -ne $b_value) {
+                                return $false
+                            }
+                            continue
+                        }
+                        Default {
+                            throw "ObjectsAreEqual unexpected type: $_"
+                        }
+                    }
+                }
+            }
+            Default {
+                return $a -eq $b
+            }
+        }
+        return $true
+    }
+
+    hidden [void] SetSettingsTypeValue([VRisingServerSettingsType]$settingsType, [string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
+        if ($true -eq [string]::IsNullOrEmpty($settingName)) {
+            throw [System.ArgumentNullException]::New('settingName')
+        }
+        try {
+            $this._settingsFileMutex.WaitOne()
+            # skip getting default value if it's being reset
+            $defaultValue = $null
+            if ($false -eq $resetToDefault) {
+                $defaultSettings = $null
+                switch ($settingsType) {
+                    ([VRisingServerSettingsType]::Host) {
+                        $defaultSettings = $this.GetDefaultHostSettingsFile()
+                        break
+                    }
+                    ([VRisingServerSettingsType]::Game) {
+                        $defaultSettings = $this.GetDefaultGameSettingsFile()
+                        break
+                    }
+                    ([VRisingServerSettingsType]::Voip) {
+                        $defaultSettings = $this.GetDefaultVoipSettingsFile()
+                        break
+                    }
+                }
+                # get default value
+                $defaultValue = $this.GetSetting($defaultSettings, $settingName)
+                # if default value matches suggested value, reset = true
+                if ($true -eq $this.ObjectsAreEqual($defaultValue, $settingValue)) {
+                    $resetToDefault = $true
+                }
+            }
+    
+            # read the file
+            $explicitSettings = $null
+            $settingsFilePath = $null
+            switch ($settingsType) {
+                ([VRisingServerSettingsType]::Host) {
+                    $explicitSettings = $this.GetHostSettingsFile()
+                    $settingsFilePath = $this.GetHostSettingsFilePath()
+                    break
+                }
+                ([VRisingServerSettingsType]::Game) {
+                    $explicitSettings = $this.GetGameSettingsFile()
+                    $settingsFilePath = $this.GetGameSettingsFilePath()
+                    break
+                }
+                ([VRisingServerSettingsType]::Voip) {
+                    $explicitSettings = $this.GetVoipSettingsFile()
+                    $settingsFilePath = $this.GetVoipSettingsFilePath()
+                    break
+                }
+            }
+    
+            # reset or modify the value
+            if ($true -eq $resetToDefault) {
+                $this.DeleteSetting($explicitSettings, $settingName)
+            } else {
+                $explicitSettings = $this.SetSetting($explicitSettings, $settingName, $settingValue)
+            }
+    
+            # write the file
+            $explicitSettings | ConvertTo-Json | Out-File -LiteralPath $settingsFilePath
+        } finally {
+            # unlock mutex
+            $this._settingsFileMutex.ReleaseMutex()
+        }
+    }
+
+    [void] SetHostSetting([string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
+        $this.SetSettingsTypeValue([VRisingServerSettingsType]::Host, $settingName, $settingValue, $resetToDefault)
+        [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] Host Setting '$settingName' has been updated")
+    }
+
+    [void] SetGameSetting([string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
+        $this.SetSettingsTypeValue([VRisingServerSettingsType]::Game, $settingName, $settingValue, $resetToDefault)
+        [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] Game Setting '$settingName' has been updated")
+    }
+
+    [void] SetVoipSetting([string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
+        $this.SetSettingsTypeValue([VRisingServerSettingsType]::Voip, $settingName, $settingValue, $resetToDefault)
+        [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] Voip Setting '$settingName' has been updated")
     }
 }
 
