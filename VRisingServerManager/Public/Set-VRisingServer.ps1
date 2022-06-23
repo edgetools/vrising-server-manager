@@ -14,7 +14,7 @@ function Set-VRisingServer {
         [string] $SettingName,
 
         [Parameter(Position=3)]
-        [string] $SettingValue,
+        [psobject] $SettingValue,
 
         [Parameter()]
         [switch] $Default

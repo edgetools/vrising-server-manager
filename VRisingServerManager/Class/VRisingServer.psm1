@@ -636,7 +636,7 @@ class VRisingServer {
                 [VRisingServerLog]::Info("[$shortName] waiting on server to stop ($stopTimeout second timeout)...")
                 $process | Wait-Process -Timeout $stopTimeout -ErrorAction Stop
             } catch [System.TimeoutException] {
-                throw [VRisingServerException]::New("[$shortName] exceeded timeout waiting for server to stop")
+                throw [VRisingServerException]::New("[$shortName] exceeded timeout waiting for server to stop", $_.Exception)
             }
             [VRisingServerLog]::Info("[$shortName] server stopped")
         }
@@ -941,61 +941,35 @@ class VRisingServer {
                 break
             }
         }
-        return $this.FindSettingsKeys($settings, $searchKey)
+        return $this.GetSettingsKeys($settings, $null) -like $searchKey
     }
 
-    hidden [string[]] FindSettingsKeys([pscustomobject]$settings, [string]$searchKey) {
-        $splitSearchKey = $searchKey -split '\.'
-        $addPrefix = $false
-        $prefix = $null
-        $properties = $null
-        if ([string]::IsNullOrWhiteSpace($splitSearchKey)) {
-            $properties = $settings.PSObject.Properties
-        } elseif ($splitSearchKey.Count -eq 1) {
-            $properties = $settings.PSObject.Properties | Where-Object { $_.Name -like "$searchKey*" }
-        } elseif ($splitSearchKey.Count -gt 1) {
-            # loop into the settings object
-            # based on the number of segments to the search key
-            $subSettings = $settings
-            for ($i = 0; $i -lt $splitSearchKey.Count; $i++) {
-                if ($i -eq ($splitSearchKey.Count - 1)) {
-                    # last item
-                } else {
-                    if ($subSettings.PSObject.Properties.Name -notcontains $splitSearchKey[$i]) {
-                        # invalid sub key (given foo.bar, foo does not exist)
-                        return $null
-                    }
-                    if ($i -eq 0) {
-                        # first item
-                        $prefix = $subSettings.PSObject.Properties[$splitSearchKey[$i]].Name
-                    } else {
-                        $prefix += ".$($subSettings.PSObject.Properties[$splitSearchKey[$i]].Name)"
-                    }
-                    $subSettings = $subSettings.PSObject.Properties[$splitSearchKey[$i]].Value
-                }
-            }
-            if ($true -eq [string]::IsNullOrWhiteSpace($splitSearchKey[-1])) {
-                # last segment is empty: "foo.bar."
-                # return all subSettings keys
-                $properties = $subSettings.PSObject.Properties
+    hidden [string[]] GetSettingsKeys($settings, [string]$prefix) {
+        $keys = [System.Collections.ArrayList]::new()
+        foreach ($property in $settings.PSObject.Properties) {
+            if ($property.TypeNameOfValue -eq 'System.Management.Automation.PSCustomObject') {
+                $keys.AddRange($this.GetSettingsKeys($property.Value, "$($property.Name)."))
             } else {
-                # last segment not empty: "foo.bar.baz"
-                # return just subSettings keys matching searchKey
-                $properties = $subSettings.PSObject.Properties | Where-Object { $_.Name -like "$($splitSearchKey[-1])*" }
+                $keys.Add($property.Name)
             }
-            $addPrefix = $true
         }
-        # return prefixed Names from properties, but suffix them only if they're a container (psobject)
-        return $properties | ForEach-Object {
-            $private:keyName = $_.Name
-            if ($_.TypeNameOfValue -eq 'System.Management.Automation.PSCustomObject') {
-                $private:keyName = "$($private:keyName)."
-            }
-            if ($true -eq $addPrefix) {
-                $private:keyName = "$prefix.$($private:keyName)"
-            }
-            $private:keyName
+        for ($i = 0; $i -lt $keys.Count; $i++) {
+            $keys[$i] = $prefix + $keys[$i]
         }
+        return $keys.ToArray([string])
+    }
+
+    hidden [psobject] FilterSettings([psobject]$settings, [string[]]$settingNameFilter) {
+        if (($null -eq $settings) -or
+                ([string]::IsNullOrWhiteSpace($settingNameFilter))) {
+            return $null
+        }
+        $filteredSettings = $null
+        foreach ($settingName in $settingNameFilter) {
+            $settingValue = $this.GetSetting($settings, $settingName)
+            $filteredSettings = $this.SetSetting($filteredSettings, $settingName, $settingValue)
+        }
+        return $filteredSettings
     }
 
     hidden [psobject] GetSetting([psobject]$settings, [string]$settingName) {
@@ -1073,6 +1047,8 @@ class VRisingServer {
                         -MemberType NoteProperty `
                         -Name $settingNameSegments[$i] `
                         -Value $settingValue
+                } else {
+                    $settingContainer.PSObject.Properties[$settingNameSegments[$i]].Value = $settingValue
                 }
             } else {
                 if ($settingContainer.PSObject.Properties.Name -notcontains $settingNameSegments[$i]) {
@@ -1148,22 +1124,15 @@ class VRisingServer {
                 break
             }
         }
+        $this.MergePSObjects($defaultSettings, $explicitSettings)
         if ([string]::IsNullOrWhiteSpace($settingName)) {
-            $this.MergePSObjects($defaultSettings, $explicitSettings)
             return $defaultSettings
+        } elseif ($settingName.Contains('*')) {
+            $matchedSettings = $this.GetSettingsKeys($defaultSettings, $null) -like $settingName
+            $filteredSettings = $this.FilterSettings($defaultSettings, $matchedSettings)
+            return $filteredSettings
         } else {
-            $explicitValue = $this.GetSetting($explicitSettings, $settingName)
-            $defaultValue = $this.GetSetting($defaultSettings, $settingName)
-            if ($null -ne $explicitValue) {
-                if ($explicitValue -is [System.Management.Automation.PSCustomObject]) {
-                    $this.MergePSObjects($defaultValue, $explicitValue)
-                    return $defaultValue
-                } else {
-                    return $explicitValue
-                }
-            } else {
-                return $defaultValue
-            }
+            return $this.GetSetting($defaultSettings, $settingName)
         }
     }
 
@@ -1199,6 +1168,7 @@ class VRisingServer {
                     $expectedComparables = @(
                         'System.Boolean',
                         'System.Int32',
+                        'System.Decimal',
                         'System.String')
                     switch ($property.TypeNameOfValue) {
                         'System.Object' {

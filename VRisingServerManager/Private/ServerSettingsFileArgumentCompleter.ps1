@@ -36,7 +36,7 @@ function ServerSettingsFileArgumentCompleter {
             if ($false -eq $FakeBoundParameters.ContainsKey('SettingsType')) {
                 return
             }
-            $serverSettingsKeys = $server.FindSettingsTypeKeys($FakeBoundParameters.SettingsType, $WordToComplete)
+            $serverSettingsKeys = $server.FindSettingsTypeKeys($FakeBoundParameters.SettingsType, "*$WordToComplete*")
             foreach ($settingsKey in $serverSettingsKeys) {
                 [System.Management.Automation.CompletionResult]::New($settingsKey)
             }

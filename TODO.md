@@ -1,4 +1,12 @@
-TODO: support wildcards on vrget settings (vrget foo Game Castle*)
+TODO: add a Wait-VRisingServer (vrwait) command
+      - checks if a command is running
+      - throws error if the current or last command error'd
+      - waits for command to finish
+      - waits for certain conditions based on last command
+      - Start
+        - waits until IsRunning()
+      - Stop
+        - waits until IsStopped()
 
 TODO(?): output server object on each command for chaining, e.g.:
          - vrget foo | vrannounce "stopping server for update" | vrstop | vrwait | vrupdate | vrwait | vrstart | vrwait | vrannounce "server update complete"
