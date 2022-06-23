@@ -16,6 +16,16 @@ function ServerSettingsFileArgumentCompleter {
 
     switch ($ParameterName) {
         'SettingName' {
+            # Foo ->
+            #   <- FooBar
+            #   <- FooBaz
+            # Foo. ->
+            #   <- Foo.Foo
+            #   <- Foo.Bar
+            # Foo.F ->
+            #   <- Foo.Foo
+            # Foo.F.Foo ->
+            #   <- (null) -- don't fuzzy search on middle
             if ($false -eq $FakeBoundParameters.ContainsKey('ShortName')) {
                 return
             }
@@ -57,52 +67,4 @@ function ServerSettingsFileArgumentCompleter {
             return
         }
     }
-
-    # switch ($ParameterName) {
-    #     'SettingName' {
-    #         if ($false -eq $FakeBoundParameters.ContainsKey('ShortName')) {
-    #             return
-    #         }
-    #         $server = Get-VRisingServer -ShortName $FakeBoundParameters.ShortName
-    #         if ($null -eq $server) {
-    #             return
-    #         }
-    #         if ($false -eq $FakeBoundParameters.ContainsKey('SettingsType')) {
-    #             return
-    #         }
-    #         $serverSettingsKeys = $server.FindSettingsTypeKeys($FakeBoundParameters.SettingsType, $WordToComplete)
-    #         foreach ($settingsKey in $serverSettingsKeys) {
-    #             [System.Management.Automation.CompletionResult]::New($settingsKey)
-    #         }
-    #         return
-    #     }
-    #     'SettingValue' {
-    #         if ($false -eq $FakeBoundParameters.ContainsKey('SettingsType')) {
-    #             return
-    #         }
-    #         return
-    #     }
-    #     Default {
-    #         return
-    #     }
-    # }
-    # GetKeys
-    # Foo ->
-    #    <- FooBar
-    #    <- FooBaz
-    # Foo. ->
-    #     <- Foo.Foo
-    #     <- Foo.Bar
-    # Foo.F ->
-    #     <- Foo.Foo
-    # Foo.F.Foo ->
-    #          <- (null) -- don't fuzzy search on middle
-    # The setter should ERROR / THROW if the type is a PSCustomObject
-    # (so you can't accidentally fuck a whole subobject)
-    # (what if you want to reset to default? use a switch?)
-    # (vrset foo host port -Default)
-    # $serverShortNames = [VRisingServer]::GetShortNames() -like "$WordToComplete*"
-    # foreach ($serverShortName in $serverShortNames) {
-    #     [System.Management.Automation.CompletionResult]::New($serverShortName)
-    # }
 }
