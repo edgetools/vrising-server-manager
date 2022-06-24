@@ -353,6 +353,8 @@ The third-tier processes are the server application processes and the update pro
 
 Orchestrating the server processes involves issuing commands from the first tier, which writes commands into the command queue for each server. The secondary tier then reads these commands from the queue, and orchestrates any actions against its resources, including starting or stopping any third tier processes, as needed.
 
+Because the third and second tier processes are launched in the background, the user can safely close the interactive powershell window and the third and second tiers will continue running. New powershell sessions can discover the processes in the second and third tiers by reading the configuration file from disk where the process information is kept.
+
 Configuration for servers is stored in json files in the `ProgramData` directory, which allows multiple instances of the manager to concurrently query and update server information such as the running process ID.
 
 These configuration files are multi-process thread-safe across the application, with writes protected using named mutexes. This allows the use of automation to run manager commands from multiple sources without worrying about corrupting the state.
