@@ -1,8 +1,28 @@
 # V Rising Server Manager
 
-Windows PowerShell cmdlets for easily managing multiple V Rising servers on a Windows machine
+Windows PowerShell cmdlets for easily managing multiple dedicated V Rising servers on a Windows machine
 
-## Table of Contents
+## Features
+
+- Out-of-box support for PowerShell 5.1+ (already included in most modern Windows installations)
+
+- Servers run in their own process so you can close the PowerShell window
+
+- Automatically update server on start
+
+- Automatically restart servers on a schedule
+
+- Send system messages to players in-game (and automatically on restart)
+
+- Search for and customize Game, Host, and Voip settings
+
+- Read and tail log files
+
+- Rotate and archive log files
+
+- Archive save files
+
+# Table of Contents
 
 [Requirements](#requirements)
 
@@ -88,14 +108,14 @@ Windows PowerShell cmdlets for easily managing multiple V Rising servers on a Wi
 
 # Requirements
 
-Requires **PowerShell 5.1** or greater
+Requires **PowerShell 5.1** or greater (Targeting Windows Server 2019, Windows 10 and Newer)
 
 Tested with
 
 - Windows Server 2019
 - Windows 11
 
-*Note: other platforms may also work that meet the minimum requirements, but have not been tested.*
+Other platforms may also work that meet the minimum requirements, but have not been tested.
 
 # Installation
 
