@@ -76,6 +76,8 @@ Windows PowerShell cmdlets for easily managing multiple V Rising servers on a Wi
 
 - [Remove-VRisingServer](#remove-vrisingserver)
 
+[Technical Details](#technical-details)
+
 [Development](#development)
 
 - [Build Requirements](#build-requirements)
@@ -338,6 +340,24 @@ Alias: **vrdelete**
 Removes specified [Server](#server) configuration(s) from the local machine.
 
 Does not remove the [InstallDir](#installdir), [DataDir](#datadir), or [LogDir](#logdir) which must be manually deleted if you wish to completely uninstall a server installation.
+
+# Technical Details
+
+VRising Server Manager orchestrates a series of process-tiers to monitor and manage each server.
+
+The primary process tier is the interactive powershell process used when running `Import-VRisingServerManager`. In this process, the user can query and interact with multiple servers at once. Commands issued to servers are ran asynchronously by the secondary tier.
+
+The secondary process tier contains the background processes used to asynchronously carry out commands against each server. One background process is launched per configured server while a command is running (or the server is running). It continuously polls the state of the server configuration looking for commands in the queue, and processes them once available. Once the server is stopped or the current command finishes executing, the background process dies.
+
+The third-tier processes are the server application processes and the update processes (steamcmd). These processes are launched and monitored by the second tier.
+
+Orchestrating the server processes involves issuing commands from the first tier, which writes commands into the command queue for each server. The secondary tier then reads these commands from the queue, and orchestrates any actions against its resources, including starting or stopping any third tier processes, as needed.
+
+Configuration for servers is stored in json files in the `ProgramData` directory, which allows multiple instances of the manager to concurrently query and update server information such as the running process ID.
+
+These configuration files are multi-process thread-safe across the application, with writes protected using named mutexes. This allows the use of automation to run manager commands from multiple sources without worrying about corrupting the state.
+
+Server settings such as Host, Game, and Voip parameters are loaded from disk, converted into PSObjects, and combined with both their default values and any per-server overrides. Writes are then converted back to json on disk.
 
 # Development
 
