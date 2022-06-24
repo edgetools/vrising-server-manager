@@ -103,11 +103,11 @@ Copy the module folder into a [supported module path](https://docs.microsoft.com
 
 # Usage
 
-*Tip: VRising Server Manager never deletes a server installation, game settings, or save data when removing a [Server]() configuration. You may safely delete and re-create or re-import a [Server]() configuration at any time.*
+*Tip: VRising Server Manager never deletes a server installation, game settings, or save data when removing a [Server](#server) configuration. You may safely delete and re-create or re-import a [Server](#server) configuration at any time.*
 
 ## Set the Default Server Folder
 
-When new servers are created, their [InstallDir](), [DataDir](), and [LogDir]() are automatically configured as a subfolder of [DefaultServerDir]() named after their [ShortName]() *(e.g. D:\VRisingServers\MyServer)*
+When new servers are created, their [InstallDir](#installdir), [DataDir](#datadir), and [LogDir](#logdir) are automatically configured as a subfolder of [DefaultServerDir]() named after their [ShortName](#shortname) *(e.g. D:\VRisingServers\MyServer)*
 
 *Tip: if you prefer to put an InstallDir, LogDir, or DataDir elsewhere, you can also customize the specific values of each server after creation.*
 
@@ -117,7 +117,7 @@ vrmset DefaultServerDir D:\ExamplePath\ForAllServers
 
 ## Create a new Server
 
-*Note: the name must be a [ShortName](), you can customize the [DisplayName]() after creation.*
+*Note: the name must be a [ShortName](#shortname), you can customize the [DisplayName]() after creation.*
 
 ```
 vrcreate MyServer
@@ -229,20 +229,20 @@ vrsay MyServer "This is a system message"
 
 ## Remove Server
 
-*Note: to prevent unintentionally removing server data, this does not remove the [InstallDir](), [DataDir](), or [LogDir]() which must be manually deleted if you wish to completely uninstall a server installation.*
+*Note: to prevent unintentionally removing server data, this does not remove the [InstallDir](#installdir), [DataDir](#datadir), or [LogDir](#logdir) which must be manually deleted if you wish to completely uninstall a server installation.*
 
 *If you accidentally remove a server, you can easily add it again with **vrcreate** or **vrimport***
 
 Remove all Servers
 
 ```
-vrremove
+vrdelete
 ```
 
 Remove a specific Server
 
 ```
-vrremove MyServer
+vrdelete MyServer
 ```
 
 # Concepts
@@ -267,57 +267,57 @@ vrremove MyServer
 
 Alias: **vrcreate**
 
-Creates new [Server]() configuration on the local machine with the specified [ShortName]().
+Creates new [Server](#server) configuration on the local machine with the specified [ShortName](#shortname).
 
 ## Import-VRisingServer
 
 Alias: **vrimport**
 
-Creates new [Server]() configuration with the specified [ShortName](), using paths from an existing server on the local machine.
+Creates new [Server](#server) configuration with the specified [ShortName](#shortname), using paths from an existing server on the local machine.
 
 ## Get-VRisingServer
 
 Alias: **vrget**
 
-Retrieves all or specified [Server]() configurations from the local machine, or retrieves a [Setting]().
+Retrieves all or specified [Server](#server) configurations from the local machine, or retrieves a [Setting](#setting).
 
 ## Set-VRisingServer
 
 Alias: **vrset**
 
-Modifies or resets the value of a [Setting]() for specified [Server]()(s).
+Modifies or resets the value of a [Setting](#setting) for specified [Server](#server)(s).
 
 ## Start-VRisingServer
 
 Alias: **vrstart**
 
-Starts specified [Server]()(s), including orchestrating [UpdateOnStartup](), if enabled.
+Starts specified [Server](#server)(s), including orchestrating [UpdateOnStartup](), if enabled.
 
 ## Stop-VRisingServer
 
 Alias: **vrstop**
 
-Stops specified [Server]()(s), including orchestrating [AnnounceShutdown]() and [ShutdownDelay]() if enabled.
+Stops specified [Server](#server)(s), including orchestrating [AnnounceShutdown]() and [ShutdownDelay]() if enabled.
 
 ## Update-VRisingServer
 
 Alias: **vrupdate**
 
-Updates specified [Server]()(s) using [steamcmd]()
+Updates specified [Server](#server)(s) using [steamcmd]()
 
 ## Send-VRisingServerMessage
 
 Alias: **vrsay**
 
-Sends [Server]()(s) a system message using [mcrcon]()
+Sends [Server](#server)(s) a system message using [mcrcon]()
 
 ## Remove-VRisingServer
 
 Alias: **vrdelete**
 
-Removes specified [Server]() configuration(s) from the local machine.
+Removes specified [Server](#server) configuration(s) from the local machine.
 
-Does not remove the [InstallDir](), [DataDir](), or [LogDir]() which must be manually deleted if you wish to completely uninstall a server installation.
+Does not remove the [InstallDir](#installdir), [DataDir](#datadir), or [LogDir](#logdir) which must be manually deleted if you wish to completely uninstall a server installation.
 
 # Development
 
@@ -347,4 +347,4 @@ Does not remove the [InstallDir](), [DataDir](), or [LogDir]() which must be man
 
 # License
 
-see [LICENSE](LICENSE)
+see [LICENSE.txt](LICENSE.txt)
