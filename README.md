@@ -40,6 +40,8 @@ Windows PowerShell cmdlets for easily managing multiple V Rising servers on a Wi
 
     - [ShortName](#shortname)
 
+    - [DisplayName](#displayname)
+
     - [InstallDir](#installdir)
 
     - [DataDir](#datadir)
@@ -115,9 +117,9 @@ Copy the module folder into a [supported module path](https://docs.microsoft.com
 
 ## Set the Default Server Folder
 
-When new servers are created, their [InstallDir](#installdir), [DataDir](#datadir), and [LogDir](#logdir) are automatically configured as a subfolder of [DefaultServerDir](#defaultserverdir) named after their [ShortName](#shortname) *(e.g. D:\VRisingServers\MyServer)*
+When new servers are created, their [InstallDir](#installdir), [DataDir](#datadir), and [LogDir](#logdir) are automatically configured as a subfolder of [DefaultServerDir](#defaultserverdir) named after their [ShortName](#shortname) (e.g. `D:\VRisingServers\MyServer`)
 
-*Tip: if you prefer to put an InstallDir, LogDir, or DataDir elsewhere, you can also customize the specific values of each server after creation.*
+*Tip: if you prefer to put an `InstallDir`, `LogDir`, or `DataDir` elsewhere, you can also customize the specific values of each server after creation.*
 
 ```
 vrmset DefaultServerDir D:\ExamplePath\ForAllServers
@@ -125,7 +127,7 @@ vrmset DefaultServerDir D:\ExamplePath\ForAllServers
 
 ## Create a new Server
 
-*Note: the name must be a [ShortName](#shortname), you can customize the [DisplayName]() after creation.*
+*Note: the name must be a [ShortName](#shortname) - you can customize the [DisplayName](#displayname) after creation.*
 
 ```
 vrcreate MyServer
@@ -260,6 +262,8 @@ vrdelete MyServer
 ## Server
 
 ### ShortName
+
+### DisplayName
 
 ### InstallDir
 
