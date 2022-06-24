@@ -1,0 +1,2 @@
+# module parameters
+$ErrorActionPreference = 'Stop'

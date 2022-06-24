@@ -1,9 +1,3 @@
-using module .\VRisingServerLog.psm1
-using module .\VRisingServerException.psm1
-using module .\VRisingServerSettingsMap.psm1
-
-$ErrorActionPreference = 'Stop'
-
 enum VRisingServerLogType {
     File
     Output
@@ -453,8 +447,8 @@ class VRisingServer {
         $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.Command.Info.log"
         $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.Command.Error.log"
         $process = Start-Process `
-            -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
-            -ArgumentList "-Command & { `$ErrorActionPreference = 'Stop'; Import-Module VRisingServerManager; `$server = Get-VRisingServer -ShortName '$($properties.shortName)'; $commandString; }" `
+            -FilePath 'powershell' `
+            -ArgumentList "-Command & { `$ErrorActionPreference = 'Stop'; `$server = Get-VRisingServer -ShortName '$($properties.shortName)'; $commandString; }" `
             -WindowStyle Hidden `
             -RedirectStandardOutput $stdoutLogFile `
             -RedirectStandardError $stderrLogFile `
@@ -502,8 +496,8 @@ class VRisingServer {
                 -WindowStyle Hidden `
                 -RedirectStandardOutput $stdoutLogFile `
                 -RedirectStandardError $stderrLogFile `
-                -FilePath $serverExePath `
-                -ArgumentList "-persistentDataPath `"$($properties.DataDir)`" -logFile `"$logFile`"" `
+                -FilePath 'powershell' `
+                -ArgumentList "Invoke-VRisingServer '$($properties.ShortName)' '$serverExePath' '$($properties.DataDir)' '$logFile'" `
                 -PassThru
         } catch [System.IO.DirectoryNotFoundException] {
             throw [VRisingServerException]::New("[$($properties.ShortName)] server failed to start due to missing directory -- try running update first")
@@ -1278,7 +1272,23 @@ class VRisingServer {
         $this.SetSettingsTypeValue([VRisingServerSettingsType]::Voip, $settingName, $settingValue, $resetToDefault)
         [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] Voip Setting '$settingName' modified")
     }
-}
 
-# custom formatters
-Update-FormatData -AppendPath "$PSScriptRoot\VRisingServer.Format.ps1xml"
+    [void] KillMonitor() {}
+
+    [void] StopMonitor() {}
+
+    [void] RunMonitor() {
+        $runLoop = $true
+        while ($true -eq $runLoop) {
+            $properties = $this._server.ReadProperties(
+                'ShortName',
+                'RunProcessMonitor'
+            )
+            if ($false -eq $properties.RunProcessMonitor) {
+                $runLoop = $false
+            }
+            [VRisingServerLog]::Info("[$($properties.ShortName))] Monitor is Running...")
+            Start-Sleep -Seconds 1
+        }
+    }
+}

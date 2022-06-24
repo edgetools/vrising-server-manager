@@ -1,5 +1,3 @@
-using module ..\Class\VRisingServer.psm1
-
 function Remove-VRisingServer {
     [CmdletBinding(DefaultParameterSetName='ByShortName', SupportsShouldProcess, ConfirmImpact='High')]
     param (

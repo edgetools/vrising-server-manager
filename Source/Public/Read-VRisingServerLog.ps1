@@ -1,5 +1,3 @@
-using module ..\Class\VRisingServer.psm1
-
 function Read-VRisingServerLog {
     [CmdletBinding(DefaultParameterSetName='ByShortName')]
     param(
