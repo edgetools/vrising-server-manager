@@ -34,9 +34,17 @@ Windows PowerShell cmdlets for easily managing multiple V Rising servers on a Wi
 
 [Concepts](#concepts)
 
+- [DefaultServerDir](#defaultserverdir)
+
 - [Server](#server)
 
     - [ShortName](#shortname)
+
+    - [InstallDir](#installdir)
+
+    - [DataDir](#datadir)
+
+    - [LogDir](#logdir)
 
     - [UpdateOnStartup](#updateonstartup)
 
@@ -107,7 +115,7 @@ Copy the module folder into a [supported module path](https://docs.microsoft.com
 
 ## Set the Default Server Folder
 
-When new servers are created, their [InstallDir](#installdir), [DataDir](#datadir), and [LogDir](#logdir) are automatically configured as a subfolder of [DefaultServerDir]() named after their [ShortName](#shortname) *(e.g. D:\VRisingServers\MyServer)*
+When new servers are created, their [InstallDir](#installdir), [DataDir](#datadir), and [LogDir](#logdir) are automatically configured as a subfolder of [DefaultServerDir](#defaultserverdir) named after their [ShortName](#shortname) *(e.g. D:\VRisingServers\MyServer)*
 
 *Tip: if you prefer to put an InstallDir, LogDir, or DataDir elsewhere, you can also customize the specific values of each server after creation.*
 
@@ -231,7 +239,7 @@ vrsay MyServer "This is a system message"
 
 *Note: to prevent unintentionally removing server data, this does not remove the [InstallDir](#installdir), [DataDir](#datadir), or [LogDir](#logdir) which must be manually deleted if you wish to completely uninstall a server installation.*
 
-*If you accidentally remove a server, you can easily add it again with **vrcreate** or **vrimport***
+*If you accidentally remove a server, you can easily add it again with [vrcreate](#new-vrisingserver) or [vrimport](#import-vrisingserver).*
 
 Remove all Servers
 
@@ -247,9 +255,17 @@ vrdelete MyServer
 
 # Concepts
 
+## DefaultServerDir
+
 ## Server
 
 ### ShortName
+
+### InstallDir
+
+### DataDir
+
+### LogDir
 
 ### UpdateOnStartup
 
