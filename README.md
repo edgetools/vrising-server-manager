@@ -110,6 +110,8 @@ Windows PowerShell cmdlets for easily managing multiple dedicated V Rising serve
 
 Requires **PowerShell 5.1** or greater (Targeting Windows Server 2019, Windows 10 and Newer)
 
+*Tip: Check your PowerShell version with `$PSVersionTable.PSVersion.ToString()`*
+
 Tested with
 
 - Windows Server 2019
