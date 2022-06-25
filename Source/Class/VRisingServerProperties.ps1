@@ -8,6 +8,10 @@ class VRisingServerProperties {
         $this._propertiesFileMutex = [System.Threading.Mutex]::New($false, "VRisingServerProperties-$fileName")
     }
 
+    [bool] IsEnabled() {
+        return $this.ReadProperty('Enabled') -eq $true
+    }
+
     [string] GetFilePath() {
         return $this._filePath
     }
@@ -31,7 +35,17 @@ class VRisingServerProperties {
     }
 
     hidden [void] WriteProperty([string]$name, [psobject]$value) {
-        $this.WriteProperties(@{$name=$value})
+        # deal with PS5.1 ETS System.Array
+        if (($null -ne $value) -and
+                ('Object[]' -eq ($value.GetType().Name))) {
+            $this.WriteProperties(@{
+                $name=[psobject[]]$value
+            })
+        } else {
+            $this.WriteProperties(@{
+                $name=$value
+            })
+        }
     }
 
     hidden [void] WriteProperties([hashtable]$nameValues) {
@@ -57,7 +71,8 @@ class VRisingServerProperties {
                     $fileContent | Add-Member -MemberType NoteProperty -Name $nameValue.Name -Value $nameValue.Value
                 }
             }
-            $fileContent | ConvertTo-Json | Out-File -LiteralPath $this._filePath
+            $fileContentJson = ConvertTo-Json -InputObject $fileContent -Depth 5
+            $fileContentJson | Out-File -LiteralPath $this._filePath
         } finally {
             $this._propertiesFileMutex.ReleaseMutex()
         }

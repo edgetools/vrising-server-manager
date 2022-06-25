@@ -172,10 +172,12 @@ class VRisingServer {
             # create it
             New-Item -Path $configFileDir -ItemType Directory | Out-Null
         }
-        [PSCustomObject]@{
+        $configFile = [PSCustomObject]@{
             DefaultServerDir = [VRisingServer]::_config['DefaultServerDir']
             SteamCmdPath = [VRisingServer]::_config['SteamCmdPath']
-        } | ConvertTo-Json | Out-File -LiteralPath ([VRisingServer]::_configFilePath)
+        }
+        $configFileJson = ConvertTo-Json -InputObject $configFile -Depth 5
+        $configFileJson | Out-File -LiteralPath ([VRisingServer]::_configFilePath)
         [VRisingServerLog]::Verbose("Saved main config file")
     }
 
@@ -313,13 +315,15 @@ class VRisingServer {
     }
 
     # instance variables
-    [VRisingServerProperties] $_properties
-    [VRisingServerSettings] $_settings
+    hidden [VRisingServerProperties] $_properties
+    hidden [VRisingServerSettings] $_settings
+    hidden [VRisingServerProcessMonitor] $_processMonitor
 
     # instance constructors
     VRisingServer([string]$filePath, [string]$shortName) {
         $this._properties = [VRisingServerProperties]::New($filePath)
         $this._settings = [VRisingServerSettings]::New($this._properties)
+        $this._processMonitor = [VRisingServerProcessMonitor]::New($this._properties)
     }
 
     # instance methods
@@ -734,25 +738,6 @@ class VRisingServer {
             } else {
                 throw $_
             }
-        }
-    }
-
-    [void] KillMonitor() {}
-
-    [void] StopMonitor() {}
-
-    [void] RunMonitor() {
-        $runLoop = $true
-        while ($true -eq $runLoop) {
-            $properties = $this._server._properties.ReadProperties(
-                'ShortName',
-                'RunProcessMonitor'
-            )
-            if ($false -eq $properties.RunProcessMonitor) {
-                $runLoop = $false
-            }
-            [VRisingServerLog]::Info("[$($properties.ShortName))] Monitor is Running...")
-            Start-Sleep -Seconds 1
         }
     }
 }

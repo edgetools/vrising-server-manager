@@ -97,7 +97,8 @@ class VRisingServerSettings {
             }
 
             # write the file
-            $explicitSettings | ConvertTo-Json | Out-File -LiteralPath $settingsFilePath
+            $explicitSettingsJson = ConvertTo-Json -InputObject $explicitSettings -Depth 5
+            $explicitSettingsJson | Out-File -LiteralPath $settingsFilePath
         } finally {
             # unlock mutex
             $this._settingsFileMutex.ReleaseMutex()
@@ -249,6 +250,19 @@ class VRisingServerSettings {
                         }
                     }
                 }
+                continue
+            }
+            'Object[]' {
+                if ($a.Count -ne $b.Count) {
+                    return $false
+                }
+                for ($i=0; $i -lt $a.Count; $i++) {
+                    if ($false -eq $this.ObjectsAreEqual($a[$i], $b[$i])) {
+                        return $false
+                    }
+                    continue
+                }
+                continue
             }
             Default {
                 return $a -eq $b
@@ -333,6 +347,13 @@ class VRisingServerSettings {
         if ($null -eq $settings) {
             $settings = [PSCustomObject]@{}
         }
+        # deal with PS5.1 ETS System.Array
+        if (($null -ne $settingValue) -and
+                ('Object[]' -eq ($settingValue.GetType().Name))) {
+            $preparedValue = [psobject[]]$settingValue
+        } else {
+            $preparedValue = $settingValue
+        }
         $settingNameSegments = $settingName -split '\.'
         $settingContainer = $settings
         # loop into the object
@@ -344,9 +365,9 @@ class VRisingServerSettings {
                     $settingContainer | Add-Member `
                         -MemberType NoteProperty `
                         -Name $settingNameSegments[$i] `
-                        -Value $settingValue
+                        -Value $preparedValue
                 } else {
-                    $settingContainer.PSObject.Properties[$settingNameSegments[$i]].Value = $settingValue
+                    $settingContainer.PSObject.Properties[$settingNameSegments[$i]].Value = $preparedValue
                 }
             } else {
                 if ($settingContainer.PSObject.Properties.Name -notcontains $settingNameSegments[$i]) {
