@@ -28,7 +28,7 @@ function Read-VRisingServerLog {
         foreach ($serverItem in $servers) {
             $logFile = $serverItem.GetLogFilePath($LogType)
             if ($false -eq [string]::IsNullOrWhiteSpace($logFile)) {
-                $shortName = $($serverItem.ReadProperty('ShortName'))
+                $shortName = $($serverItem._properties.ReadProperty('ShortName'))
                 $getContentParams = @{
                     LiteralPath = $logFile
                 }

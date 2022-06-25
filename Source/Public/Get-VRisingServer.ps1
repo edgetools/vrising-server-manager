@@ -16,13 +16,13 @@ function Get-VRisingServer {
         foreach ($server in $servers) {
             switch ($SettingsType) {
                 ([VRisingServerSettingsType]::Host) {
-                    $server.GetHostSetting($SettingName)
+                    $server._settings.GetHostSetting($SettingName)
                 }
                 ([VRisingServerSettingsType]::Game) {
-                    $server.GetGameSetting($SettingName)
+                    $server._settings.GetGameSetting($SettingName)
                 }
                 ([VRisingServerSettingsType]::Voip) {
-                    $server.GetVoipSetting($SettingName)
+                    $server._settings.GetVoipSetting($SettingName)
                 }
             }
         }

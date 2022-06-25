@@ -29,13 +29,13 @@ function Set-VRisingServer {
     foreach ($server in $servers) {
         switch ($SettingsType) {
             ([VRisingServerSettingsType]::Host) {
-                $server.SetHostSetting($SettingName, $SettingValue, $Default)
+                $server._settings.SetHostSetting($SettingName, $SettingValue, $Default)
             }
             ([VRisingServerSettingsType]::Game) {
-                $server.SetGameSetting($SettingName, $SettingValue, $Default)
+                $server._settings.SetGameSetting($SettingName, $SettingValue, $Default)
             }
             ([VRisingServerSettingsType]::Voip) {
-                $server.SetVoipSetting($SettingName, $SettingValue, $Default)
+                $server._settings.SetVoipSetting($SettingName, $SettingValue, $Default)
             }
         }
     }

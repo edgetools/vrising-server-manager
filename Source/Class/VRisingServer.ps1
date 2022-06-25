@@ -1,27 +1,10 @@
-enum VRisingServerLogType {
-    File
-    Output
-    Error
-    Update
-    UpdateError
-    Command
-    CommandError
-}
-
-enum VRisingServerSettingsType {
-    Host
-    Game
-    Voip
-}
-
 class VRisingServer {
     # static variables
     static hidden [hashtable] $_config
     static hidden [string] $_configFilePath
     static hidden [string] $_serverFileDir
-    static hidden [string] $SAVES_DIR_NAME = 'Saves'
-    static hidden [string] $SETTINGS_DIR_NAME = 'Settings'
     static hidden [string] $DATA_DIR_NAME = 'Data'
+    static hidden [string] $SAVES_DIR_NAME = 'Saves'
     static hidden [string] $INSTALL_DIR_NAME = 'Install'
     static hidden [string] $LOG_DIR_NAME = 'Log'
     static hidden [int] $STEAM_APP_ID = 1829350
@@ -32,20 +15,20 @@ class VRisingServer {
             -TypeName "VRisingServer" `
             -MemberName ShortName `
             -MemberType ScriptProperty `
-            -Value { return $this.ReadProperty('ShortName') } `
+            -Value { return $this._properties.ReadProperty('ShortName') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName SaveName `
             -MemberType ScriptProperty `
-            -Value { return $this.GetHostSetting('SaveName') } `
+            -Value { return $this._settings.GetHostSetting('SaveName') } `
             -SecondValue { param($value) $this.SetHostSetting('SaveName',  $value) } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName DisplayName `
             -MemberType ScriptProperty `
-            -Value { return $this.GetHostSetting('Name') } `
+            -Value { return $this._settings.GetHostSetting('Name') } `
             -SecondValue { param($value) $this.SetHostSetting('Name',  $value) } `
             -Force
         Update-TypeData `
@@ -58,7 +41,7 @@ class VRisingServer {
             -TypeName "VRisingServer" `
             -MemberName LastCommand `
             -MemberType ScriptProperty `
-            -Value { return $this.ReadProperty('CommandType') } `
+            -Value { return $this._properties.ReadProperty('CommandType') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -82,25 +65,25 @@ class VRisingServer {
             -TypeName "VRisingServer" `
             -MemberName Enabled `
             -MemberType ScriptProperty `
-            -Value { return $this.ReadProperty('Enabled') } `
+            -Value { return $this._properties.ReadProperty('Enabled') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName UpdateOnStartup `
             -MemberType ScriptProperty `
-            -Value { return $this.ReadProperty('UpdateOnStartup') } `
+            -Value { return $this._properties.ReadProperty('UpdateOnStartup') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName InstallDir `
             -MemberType ScriptProperty `
-            -Value { return $this.ReadProperty('InstallDir') } `
+            -Value { return $this._properties.ReadProperty('InstallDir') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName DataDir `
             -MemberType ScriptProperty `
-            -Value { return $this.ReadProperty('DataDir') } `
+            -Value { return $this._properties.ReadProperty('DataDir') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -118,7 +101,7 @@ class VRisingServer {
             -TypeName "VRisingServer" `
             -MemberName LogDir `
             -MemberType ScriptProperty `
-            -Value { return $this.ReadProperty('LogDir') } `
+            -Value { return $this._properties.ReadProperty('LogDir') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -212,14 +195,14 @@ class VRisingServer {
     }
 
     static hidden [VRisingServer] GetServer([string]$shortName) {
-        return [VRisingServer]::LoadServers() | Where-Object { $_.ReadProperty('ShortName') -eq $shortName }
+        return [VRisingServer]::LoadServers() | Where-Object { $_._properties.ReadProperty('ShortName') -eq $shortName }
     }
 
     static hidden [VRisingServer[]] FindServers([string]$searchKey, [VRisingServer[]]$servers) {
         if ([string]::IsNullOrWhiteSpace($searchKey)) {
             $searchKey = '*'
         }
-        return $servers | Where-Object { $_.ReadProperty('ShortName') -like $searchKey }
+        return $servers | Where-Object { $_._properties.ReadProperty('ShortName') -like $searchKey }
     }
 
     static hidden [VRisingServer[]] FindServers([string]$searchKey) {
@@ -227,7 +210,7 @@ class VRisingServer {
     }
 
     static hidden [string[]] GetShortNames() {
-        return [VRisingServer]::LoadServers() | ForEach-Object { $_.ReadProperty('ShortName') }
+        return [VRisingServer]::LoadServers() | ForEach-Object { $_._properties.ReadProperty('ShortName') }
     }
 
     static hidden [bool] ServerFileDirExists() {
@@ -308,79 +291,40 @@ class VRisingServer {
             CommandStderrLogFile = $null
             CommandFinished = $null
         }
-        $server.WriteProperties($serverProperties)
+        $server._properties.WriteProperties($serverProperties)
         [VRisingServerLog]::Info("[$($ShortName)] server created")
     }
 
     static hidden [void] DeleteServer([VRisingServer]$server, [bool]$force) {
         if (($true -eq $server.CommandIsRunning()) -and ($false -eq $force)) {
-            throw [VRisingServerException]::New("[$($server.ReadProperty('ShortName'))] cannot remove server while it is busy trying to $($server.ReadProperty('CommandType')) -- wait for command to complete first or use force to override")
+            throw [VRisingServerException]::New("[$($server._properties.ReadProperty('ShortName'))] cannot remove server while it is busy trying to $($server._properties.ReadProperty('CommandType')) -- wait for command to complete first or use force to override")
         }
         if (($true -eq $server.IsRunning()) -and ($false -eq $force)) {
-            throw [VRisingServerException]::New("[$($server.ReadProperty('ShortName'))] cannot remove server while it is running -- stop first or use force to override")
+            throw [VRisingServerException]::New("[$($server._properties.ReadProperty('ShortName'))] cannot remove server while it is running -- stop first or use force to override")
         }
         if (($true -eq $server.IsUpdating()) -and ($false -eq $force)) {
-            throw [VRisingServerException]::New("[$($server.ReadProperty('ShortName'))] cannot remove server while it is updating -- wait for update to complete or use force to override")
+            throw [VRisingServerException]::New("[$($server._properties.ReadProperty('ShortName'))] cannot remove server while it is updating -- wait for update to complete or use force to override")
         }
-        $shortName = $($server.ReadProperty('ShortName'))
+        $shortName = $($server._properties.ReadProperty('ShortName'))
         if ($true -eq (Test-Path -LiteralPath $server._filePath -PathType Leaf)) {
             Remove-Item -LiteralPath $server._filePath
         }
         [VRisingServerLog]::Info("[$shortName] server removed")
     }
 
-    static hidden [psobject[]] GetSuggestedSettingsValues(
-            [VRisingServerSettingsType]$settingsType,
-            [string]$shortName,
-            [string]$settingName,
-            [string]$settingValueSearchKey) {
-        # take type
-        # lookup name in type map
-        # if value type (from map) is a collection type (has multiple known values):
-        # - return collection matching input, sorted preferring input
-        # - e.g. Host ListOnMasterServer '' -> True / False
-        #        Host ListOnMasterServer 'Fa' -> False / True
-        # if value type is not a collection type (has multiple known values):
-        # - reach into settings
-        # - extract the current or default value
-        # - e.g. Host AutoSaveCount '' -> 50
-        $mapResults = [VRisingServerSettingsMap]::Get($settingsType, $settingName)
-        if (($null -ne $mapResults) -and ($mapResults.Count -gt 0)) {
-            # sort array results by those like result
-            $sortedMapResults = [System.Collections.ArrayList]::New()
-            foreach ($mapResult in $mapResults) {
-                if ($mapResult -like "$settingValueSearchKey*") {
-                    $sortedMapResults.Insert(0, $mapResult)
-                } else {
-                    $sortedMapResults.Add($mapResult)
-                }
-            }
-            return $sortedMapResults.ToArray()
-        }
-        # value does not have known values, try to grab current value from server instead
-        if ([string]::IsNullOrWhiteSpace($shortName)) {
-            return $null
-        }
-        $server = [VRisingServer]::GetServer($shortName)
-        return $server.GetSettingsTypeValue($settingsType, $settingName)
-    }
-
     # instance variables
-    hidden [string] $_filePath
-
-    hidden [System.Threading.Mutex] $_propertiesFileMutex
-    hidden [System.Threading.Mutex] $_settingsFileMutex
+    [VRisingServerProperties] $_properties
+    [VRisingServerSettings] $_settings
 
     # instance constructors
     VRisingServer([string]$filePath, [string]$shortName) {
-        $this._filePath = $filePath
-        $this._propertiesFileMutex = [System.Threading.Mutex]::New($false, "VRisingServer-$shortName-properties")
-        $this._settingsFileMutex = [System.Threading.Mutex]::New($false, "VRisingServer-$shortName-settings")
+        $this._properties = [VRisingServerProperties]::New($filePath)
+        $this._settings = [VRisingServerSettings]::New($this._properties)
     }
 
     # instance methods
     [bool] IsEnabled() {
-        return $this.ReadProperty('Enabled') -eq $true
+        return $this._properties.ReadProperty('Enabled') -eq $true
     }
 
     [bool] IsRunning() {
@@ -407,39 +351,39 @@ class VRisingServer {
 
     [void] KillUpdate([bool]$force) {
         if ($true -eq $this.CommandIsRunning()) {
-            throw [VRisingServerException]::New("[$($this.ReadProperty('ShortName'))] server is busy trying to $($this.ReadProperty('CommandType'))")
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] server is busy trying to $($this._properties.ReadProperty('CommandType'))")
         }
         if ($false -eq $this.IsUpdating()) {
-            throw [VRisingServerException]::New("[$($this.ReadProperty('ShortName'))] server is not currently updating")
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] server is not currently updating")
         }
         if ($true -eq $force) {
-            [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] forcefully stopping update process")
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] forcefully stopping update process")
         } else {
-            [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] gracefully stopping update process")
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] gracefully stopping update process")
         }
-        & taskkill.exe '/PID' $this.ReadProperty('UpdateProcessId') $(if ($true -eq $force) { '/F' })
+        & taskkill.exe '/PID' $this._properties.ReadProperty('UpdateProcessId') $(if ($true -eq $force) { '/F' })
     }
 
     [void] KillCommand([bool]$force) {
         if ($false -eq $this.CommandIsRunning()) {
-            throw [VRisingServerException]::New("[$($this.ReadProperty('ShortName'))] server is not currently running a command")
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] server is not currently running a command")
         }
         if ($true -eq $force) {
-            [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] forcefully stopping $($this.ReadProperty('CommandType')) process")
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] forcefully stopping $($this._properties.ReadProperty('CommandType')) process")
         } else {
-            [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] gracefully stopping $($this.ReadProperty('CommandType')) process")
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] gracefully stopping $($this._properties.ReadProperty('CommandType')) process")
         }
-        & taskkill.exe '/PID' $this.ReadProperty('CommandProcessId') $(if ($true -eq $force) { '/F' })
+        & taskkill.exe '/PID' $this._properties.ReadProperty('CommandProcessId') $(if ($true -eq $force) { '/F' })
     }
 
     hidden [void] DoCommand([string]$commandType, [string]$commandString) {
         if ($false -eq $this.IsEnabled()) {
-            throw [VRisingServerException]::New("[$($this.ReadProperty('ShortName'))] server is currently disabled")
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] server is currently disabled")
         }
         if ($true -eq $this.CommandIsRunning()) {
-            throw [VRisingServerException]::New("[$($this.ReadProperty('ShortName'))] server is busy trying to $($this.ReadProperty('CommandType'))")
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] server is busy trying to $($this._properties.ReadProperty('CommandType'))")
         }
-        $properties = $this.ReadProperties(@(
+        $properties = $this._properties.ReadProperties(@(
             'ShortName',
             'LogDir'
         ))
@@ -453,7 +397,7 @@ class VRisingServer {
             -RedirectStandardOutput $stdoutLogFile `
             -RedirectStandardError $stderrLogFile `
             -PassThru
-        $this.WriteProperties(@{
+        $this._properties.WriteProperties(@{
             CommandType = $commandType
             CommandStdoutLogFile = $stdoutLogFile
             CommandStderrLogFile = $stderrLogFile
@@ -467,20 +411,20 @@ class VRisingServer {
     }
 
     hidden [void] StartCommand() {
-        $this.WriteProperty('CommandFinished', $false)
+        $this._properties.WriteProperty('CommandFinished', $false)
         $this.DoStart()
-        $this.WriteProperty('CommandFinished', $true)
+        $this._properties.WriteProperty('CommandFinished', $true)
     }
 
     hidden [void] DoStart() {
         if ($true -eq $this.IsRunning()) {
-            [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] server already running")
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] server already running")
             return
         }
         if ($true -eq $this.IsUpdating()) {
-            throw [VRisingServerException]::New("[$($this.ReadProperty('ShortName'))] server is currently updating and cannot be started")
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] server is currently updating and cannot be started")
         }
-        $properties = $this.ReadProperties(@(
+        $properties = $this._properties.ReadProperties(@(
             'ShortName',
             'LogDir',
             'InstallDir',
@@ -519,7 +463,7 @@ class VRisingServer {
         #     -RedirectStandardOutput $stdoutLogFile `
         #     -RedirectStandardError $stderrLogFile `
         #     -PassThru
-        $this.WriteProperties(@{
+        $this._properties.WriteProperties(@{
             StdoutLogFile = $stdoutLogFile
             StderrLogFile = $stderrLogFile
             ProcessId = $process.Id
@@ -533,22 +477,22 @@ class VRisingServer {
     }
 
     hidden [void] StopCommand([bool]$force) {
-        $this.WriteProperty('CommandFinished', $false)
+        $this._properties.WriteProperty('CommandFinished', $false)
         $this.DoStop($force)
-        $this.WriteProperty('CommandFinished', $true)
+        $this._properties.WriteProperty('CommandFinished', $true)
     }
 
     hidden [void] DoStop([bool]$force) {
         if ($false -eq $this.IsRunning()) {
-            [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] server already stopped")
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] server already stopped")
             return
         }
         if ($true -eq $force) {
-            [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] forcefully stopping server")
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] forcefully stopping server")
         } else {
-            [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] gracefully stopping server")
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] gracefully stopping server")
         }
-        & taskkill.exe '/PID' $this.ReadProperty('ProcessId') $(if ($true -eq $force) { '/F' })
+        & taskkill.exe '/PID' $this._properties.ReadProperty('ProcessId') $(if ($true -eq $force) { '/F' })
     }
 
     [void] Update() {
@@ -556,20 +500,20 @@ class VRisingServer {
     }
 
     hidden [void] UpdateCommand() {
-        $this.WriteProperty('CommandFinished', $false)
+        $this._properties.WriteProperty('CommandFinished', $false)
         $this.DoUpdate()
-        $this.WriteProperty('CommandFinished', $true)
+        $this._properties.WriteProperty('CommandFinished', $true)
     }
 
     hidden [void] DoUpdate() {
         if ($true -eq $this.IsUpdating()) {
-            [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] server has already started updating")
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] server has already started updating")
             return
         }
         if ($true -eq $this.IsRunning()) {
-            throw [VRisingServerException]::New("[$($this.ReadProperty('ShortName'))] server must be stopped before updating")
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] server must be stopped before updating")
         }
-        $properties = $this.ReadProperties(@(
+        $properties = $this._properties.ReadProperties(@(
             'ShortName',
             'LogDir',
             'InstallDir'
@@ -606,7 +550,7 @@ class VRisingServer {
         #     -RedirectStandardOutput $stdoutLogFile `
         #     -RedirectStandardError $stderrLogFile `
         #     -PassThru
-        $this.WriteProperties(@{
+        $this._properties.WriteProperties(@{
             UpdateStdoutLogFile = $stdoutLogFile
             UpdateStderrLogFile = $stderrLogFile
             UpdateProcessId = $process.Id
@@ -620,9 +564,9 @@ class VRisingServer {
     }
 
     hidden [void] RestartCommand([bool]$force) {
-        $this.WriteProperty('CommandFinished', $false)
+        $this._properties.WriteProperty('CommandFinished', $false)
         if ($true -eq $this.IsRunning()) {
-            $shortName = $this.ReadProperty('ShortName')
+            $shortName = $this._properties.ReadProperty('ShortName')
             $stopTimeout = 30
             $process = $this.GetServerProcess()
             $this.DoStop($force)
@@ -635,100 +579,31 @@ class VRisingServer {
             [VRisingServerLog]::Info("[$shortName] server stopped")
         }
         $this.DoStart()
-        $this.WriteProperty('CommandFinished', $true)
+        $this._properties.WriteProperty('CommandFinished', $true)
     }
 
     [void] Enable() {
-        $this.WriteProperty('Enabled', $true)
-        [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] server enabled")
+        $this._properties.WriteProperty('Enabled', $true)
+        [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] server enabled")
     }
 
     [void] Disable() {
         if ($true -eq $this.CommandIsRunning()) {
-            throw [VRisingServerException]::New("[$($this.ReadProperty('ShortName'))] cannot disable server while it is busy trying to $($this.ReadProperty('CommandType'))")
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] cannot disable server while it is busy trying to $($this._properties.ReadProperty('CommandType'))")
         }
         if ($true -eq $this.IsRunning()) {
-            throw [VRisingServerException]::New("[$($this.ReadProperty('ShortName'))] cannot disable server while it is running")
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] cannot disable server while it is running")
         }
         if ($true -eq $this.IsUpdating()) {
-            throw [VRisingServerException]::New("[$($this.ReadProperty('ShortName'))] cannot disable server while it is updating")
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] cannot disable server while it is updating")
         }
-        $this.WriteProperty('Enabled', $false)
-        [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] server disabled")
-    }
-
-    hidden [string] GetDefaultSettingsDirPath() {
-        return Join-Path -Path $this.ReadProperty('InstallDir') -ChildPath 'VRisingServer_Data' |
-            Join-Path -ChildPath 'StreamingAssets' |
-            Join-Path -ChildPath 'Settings'
-    }
-
-    hidden [string] GetSettingsDirPath() {
-        return Join-Path -Path $this.ReadProperty('DataDir') -ChildPath ([VRisingServer]::SETTINGS_DIR_NAME)
-    }
-
-    hidden [string] GetSavesDirPath() {
-        return Join-Path -Path $this.ReadProperty('DataDir') -ChildPath ([VRisingServer]::SAVES_DIR_NAME)
-    }
-
-    hidden [string] GetDefaultHostSettingsFilePath() {
-        return Join-Path -Path $this.GetDefaultSettingsDirPath() -ChildPath 'ServerHostSettings.json'
-    }
-
-    hidden [string] GetDefaultGameSettingsFilePath() {
-        return Join-Path -Path $this.GetDefaultSettingsDirPath() -ChildPath 'ServerGameSettings.json'
-    }
-
-    hidden [string] GetHostSettingsFilePath() {
-        return Join-Path -Path $this.GetSettingsDirPath() -ChildPath 'ServerHostSettings.json'
-    }
-
-    hidden [string] GetGameSettingsFilePath() {
-        return Join-Path -Path $this.GetSettingsDirPath() -ChildPath 'ServerGameSettings.json'
-    }
-
-    hidden [string] GetVoipSettingsFilePath() {
-        return Join-Path -Path $this.GetSettingsDirPath() -ChildPath 'ServerVoipSettings.json'
-    }
-
-    hidden [PSCustomObject] GetDefaultHostSettingsFile() {
-        return $this.ReadSettingsFile($this.GetDefaultHostSettingsFilePath())
-    }
-
-    hidden [PSCustomObject] GetDefaultGameSettingsFile() {
-        return $this.ReadSettingsFile($this.GetDefaultGameSettingsFilePath())
-    }
-
-    hidden [PSCustomObject] GetDefaultVoipSettingsFile() {
-        return [PSCustomObject]@{
-            VOIPEnabled = $false
-            VOIPIssuer = $null
-            VOIPSecret = $null
-            VOIPAppUserId = $null
-            VOIPAppUserPwd = $null
-            VOIPVivoxDomain = $null
-            VOIPAPIEndpoint = $null
-            VOIPConversationalDistance = $null
-            VOIPAudibleDistance = $null
-            VOIPFadeIntensity = $null
-        }
-    }
-
-    hidden [PSCustomObject] GetHostSettingsFile() {
-        return $this.ReadSettingsFile($this.GetHostSettingsFilePath())
-    }
-
-    hidden [PSCustomObject] GetGameSettingsFile() {
-        return $this.ReadSettingsFile($this.GetGameSettingsFilePath())
-    }
-
-    hidden [PSCustomObject] GetVoipSettingsFile() {
-        return $this.ReadSettingsFile($this.GetVoipSettingsFilePath())
+        $this._properties.WriteProperty('Enabled', $false)
+        [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] server disabled")
     }
 
     hidden [string] GetStatus() {
         if ($true -eq $this.CommandIsRunning()) {
-            switch($this.ReadProperty('CommandType')) {
+            switch($this._properties.ReadProperty('CommandType')) {
                 'Restart' {
                     return 'Restarting'
                 }
@@ -740,7 +615,7 @@ class VRisingServer {
             return 'Updating'
         } elseif ($false -eq $this.IsEnabled()) {
             return 'Disabled'
-        } elseif ($this.ReadProperty('LastExitCode') -ne 0) {
+        } elseif ($this._properties.ReadProperty('LastExitCode') -ne 0) {
             return 'Error'
         } else {
             return 'Stopped'
@@ -750,7 +625,7 @@ class VRisingServer {
     hidden [string] GetUpdateStatus() {
         if ($true -eq $this.IsUpdating()) {
             return 'InProgress'
-        } elseif ($this.ReadProperty('UpdateLastExitCode') -ne 0) {
+        } elseif ($this._properties.ReadProperty('UpdateLastExitCode') -ne 0) {
             return 'Failed'
         } else {
             return 'OK'
@@ -760,9 +635,9 @@ class VRisingServer {
     hidden [string] GetCommandStatus() {
         if ($true -eq $this.CommandIsRunning()) {
             return 'Executing'
-        } elseif ($this.ReadProperty('CommandFinished') -eq $true) {
+        } elseif ($this._properties.ReadProperty('CommandFinished') -eq $true) {
             return 'OK'
-        } elseif ($this.ReadProperty('CommandFinished') -eq $false) {
+        } elseif ($this._properties.ReadProperty('CommandFinished') -eq $false) {
             return 'Error'
         } else {
             return 'Unknown'
@@ -797,92 +672,35 @@ class VRisingServer {
         }
     }
 
-    hidden [PSCustomObject] ReadSettingsFile([string]$filePath) {
-        if ($true -eq (Test-Path -LiteralPath $filePath -PathType Leaf)) {
-            return Get-Content $filePath | ConvertFrom-Json
-        }
-        return $null
-    }
-
     hidden [string] GetLogFilePath([VRisingServerLogType]$logType) {
         switch ($logType) {
             ([VRisingServerLogType]::File) {
-                return Join-Path -Path $this.ReadProperty('LogDir') -ChildPath 'VRisingServer.log'
+                return Join-Path -Path $this._properties.ReadProperty('LogDir') -ChildPath 'VRisingServer.log'
             }
             ([VRisingServerLogType]::Output) {
-                return $this.ReadProperty('StdoutLogFile')
+                return $this._properties.ReadProperty('StdoutLogFile')
             }
             ([VRisingServerLogType]::Error) {
-                return $this.ReadProperty('StderrLogFile')
+                return $this._properties.ReadProperty('StderrLogFile')
             }
             ([VRisingServerLogType]::Update) {
-                return $this.ReadProperty('UpdateStdoutLogFile')
+                return $this._properties.ReadProperty('UpdateStdoutLogFile')
             }
             ([VRisingServerLogType]::UpdateError) {
-                return $this.ReadProperty('UpdateStderrLogFile')
+                return $this._properties.ReadProperty('UpdateStderrLogFile')
             }
             ([VRisingServerLogType]::Command) {
-                return $this.ReadProperty('CommandStdoutLogFile')
+                return $this._properties.ReadProperty('CommandStdoutLogFile')
             }
             ([VRisingServerLogType]::CommandError) {
-                return $this.ReadProperty('CommandStderrLogFile')
+                return $this._properties.ReadProperty('CommandStderrLogFile')
             }
         }
         return $null
     }
 
-    hidden [psobject] ReadProperty([string]$name) {
-        return $this.ReadProperties(@($name)).$name
-    }
-
-    hidden [psobject] ReadProperties([string[]]$names) {
-        if ($false -eq (Test-Path -LiteralPath $this._filePath -PathType Leaf)) {
-            return $null
-        }
-        $fileContent = Get-Content -Raw -LiteralPath $this._filePath | ConvertFrom-Json
-        $properties = [hashtable]@{}
-        foreach ($name in $names) {
-            if ($fileContent.PSObject.Properties.Name -contains $name) {
-                $properties[$name] = $fileContent.$name
-            }
-        }
-        return [pscustomobject]$properties
-    }
-
-    hidden [void] WriteProperty([string]$name, [psobject]$value) {
-        $this.WriteProperties(@{$name=$value})
-    }
-
-    hidden [void] WriteProperties([hashtable]$nameValues) {
-        # get dir for path
-        $serverFileDir = $this._filePath | Split-Path -Parent
-        # check if server dir exists
-        if ($false -eq (Test-Path -LiteralPath $serverFileDir -PathType Container)) {
-            # create it
-            New-Item -Path $serverFileDir -ItemType Directory | Out-Null
-        }
-        try {
-            $this._propertiesFileMutex.WaitOne()
-            # check if file exists
-            if ($true -eq (Test-Path -LiteralPath $this._filePath -PathType Leaf)) {
-                $fileContent = Get-Content -Raw -LiteralPath $this._filePath | ConvertFrom-Json
-            } else {
-                $fileContent = [PSCustomObject]@{}
-            }
-            foreach ($nameValue in $nameValues.GetEnumerator()) {
-                if ($fileContent.PSObject.Properties.Name -contains $nameValue.Name) {
-                    $fileContent.$($nameValue.Name) = $nameValue.Value
-                } else {
-                    $fileContent | Add-Member -MemberType NoteProperty -Name $nameValue.Name -Value $nameValue.Value
-                }
-            }
-            $fileContent | ConvertTo-Json | Out-File -LiteralPath $this._filePath
-        } finally {
-            $this._propertiesFileMutex.ReleaseMutex()
-        }
-    }
-
-    hidden [void] WriteSettingsFile() {
+    hidden [string] GetSavesDirPath() {
+        return Join-Path -Path $this._properties.ReadProperty('DataDir') -ChildPath ([VRisingServer]::SAVES_DIR_NAME)
     }
 
     hidden [System.Diagnostics.Process] GetServerProcess() {
@@ -898,7 +716,7 @@ class VRisingServer {
     }
 
     hidden [System.Diagnostics.Process] GetProcessByPropertyName([string]$name) {
-        $processId = $this.ReadProperty($name)
+        $processId = $this._properties.ReadProperty($name)
         if ($processId -gt 0) {
             return $this.GetProcessById($processId)
         } else {
@@ -919,360 +737,6 @@ class VRisingServer {
         }
     }
 
-    hidden [string[]] FindSettingsTypeKeys([VRisingServerSettingsType]$settingsType, [string]$searchKey) {
-        $settings = $null
-        switch ($settingsType) {
-            ([VRisingServerSettingsType]::Host) {
-                $settings = $this.GetDefaultHostSettingsFile()
-                break
-            }
-            ([VRisingServerSettingsType]::Game) {
-                $settings = $this.GetDefaultGameSettingsFile()
-                break
-            }
-            ([VRisingServerSettingsType]::Voip) {
-                $settings = $this.GetDefaultVoipSettingsFile()
-                break
-            }
-        }
-        return $this.GetSettingsKeys($settings, $null) -like $searchKey
-    }
-
-    hidden [string[]] GetSettingsKeys($settings, [string]$prefix) {
-        $keys = [System.Collections.ArrayList]::new()
-        foreach ($property in $settings.PSObject.Properties) {
-            if ($property.TypeNameOfValue -eq 'System.Management.Automation.PSCustomObject') {
-                $keys.AddRange($this.GetSettingsKeys($property.Value, "$($property.Name)."))
-            } else {
-                $keys.Add($property.Name)
-            }
-        }
-        for ($i = 0; $i -lt $keys.Count; $i++) {
-            $keys[$i] = $prefix + $keys[$i]
-        }
-        return $keys.ToArray([string])
-    }
-
-    hidden [psobject] FilterSettings([psobject]$settings, [string[]]$settingNameFilter) {
-        if (($null -eq $settings) -or
-                ([string]::IsNullOrWhiteSpace($settingNameFilter))) {
-            return $null
-        }
-        $filteredSettings = $null
-        foreach ($settingName in $settingNameFilter) {
-            $settingValue = $this.GetSetting($settings, $settingName)
-            $filteredSettings = $this.SetSetting($filteredSettings, $settingName, $settingValue)
-        }
-        return $filteredSettings
-    }
-
-    hidden [psobject] GetSetting([psobject]$settings, [string]$settingName) {
-        if ($null -eq $settings) {
-            return $null
-        }
-        $settingNameSegments = $settingName -split '\.'
-        $settingContainer = $settings
-        # loop into the object
-        # based on the number of segments to the path
-        for ($i = 0; $i -lt $settingNameSegments.Count; $i++) {
-            if ($i -eq ($settingNameSegments.Count - 1)) {
-                # last item
-                if ($settingContainer.PSObject.Properties.Name -notcontains $settingNameSegments[$i]) {
-                    return $null
-                }
-            } else {
-                if ($null -eq $settingContainer) {
-                    # parent pointed to a null value
-                    return $null
-                }
-                if ($settingContainer.PSObject.Properties.Name -notcontains $settingNameSegments[$i]) {
-                    # missing sub key (given foo.bar, foo does not exist)
-                    return $null
-                }
-                $settingContainer = $settingContainer.PSObject.Properties[$settingNameSegments[$i]].Value
-            }
-        }
-        return $settingContainer.PSObject.Properties[$settingNameSegments[-1]].Value
-    }
-
-    hidden [void] DeleteSetting([psobject]$settings, [string]$settingName) {
-        if ($null -eq $settings) {
-            return
-        }
-        $settingNameSegments = $settingName -split '\.'
-        $settingContainer = $settings
-        # loop into the object
-        # based on the number of segments to the path
-        for ($i = 0; $i -lt $settingNameSegments.Count; $i++) {
-            if ($i -eq ($settingNameSegments.Count - 1)) {
-                # last item
-                if ($settingContainer.PSObject.Properties.Name -contains $settingNameSegments[$i]) {
-                    $settingContainer.PSObject.Properties.Remove($settingNameSegments[$i])
-                }
-            } else {
-                if ($null -eq $settingContainer) {
-                    # parent pointed to a null value
-                    return
-                }
-                if ($settingContainer.PSObject.Properties.Name -notcontains $settingNameSegments[$i]) {
-                    # missing sub key (given foo.bar, foo does not exist)
-                    return
-                }
-                $settingContainer = $settingContainer.PSObject.Properties[$settingNameSegments[$i]].Value
-            }
-        }
-        return
-    }
-
-    # returns the modified (or new) settings object
-    hidden [psobject] SetSetting([psobject]$settings, [string]$settingName, [psobject]$settingValue) {
-        if ($null -eq $settings) {
-            $settings = [PSCustomObject]@{}
-        }
-        $settingNameSegments = $settingName -split '\.'
-        $settingContainer = $settings
-        # loop into the object
-        # based on the number of segments to the path
-        for ($i = 0; $i -lt $settingNameSegments.Count; $i++) {
-            if ($i -eq ($settingNameSegments.Count - 1)) {
-                # last item
-                if ($settingContainer.PSObject.Properties.Name -notcontains $settingNameSegments[$i]) {
-                    $settingContainer | Add-Member `
-                        -MemberType NoteProperty `
-                        -Name $settingNameSegments[$i] `
-                        -Value $settingValue
-                } else {
-                    $settingContainer.PSObject.Properties[$settingNameSegments[$i]].Value = $settingValue
-                }
-            } else {
-                if ($settingContainer.PSObject.Properties.Name -notcontains $settingNameSegments[$i]) {
-                    # missing sub key (given foo.bar, foo does not exist)
-                    # add the missing key
-                    $settingContainer | Add-Member `
-                        -MemberType NoteProperty `
-                        -Name $settingNameSegments[$i] `
-                        -Value ([PSCustomObject]@{})
-                }
-                $settingContainer = $settingContainer.PSObject.Properties[$settingNameSegments[$i]].Value
-            }
-        }
-        return $settings
-    }
-
-    # take a source object and merge an overlay on top of it
-    # does not clone, modifies any objects passed by reference
-    hidden [void] MergePSObjects([psobject]$sourceObject, [psobject]$overlay) {
-        if ($null -eq $overlay) {
-            return
-        }
-        if ($null -eq $sourceObject) {
-            $sourceObject = $overlay
-        }
-        # iterate through the properties on the overlay
-        $overlay.PSObject.Properties | ForEach-Object {
-            $currentProperty = $_
-            # if the sourceobject does NOT contain that property, just assign it from the overlay
-            if ($sourceObject.PSObject.Properties.Name -notcontains $currentProperty.Name) {
-                $sourceObject | Add-Member `
-                    -MemberType NoteProperty `
-                    -Name $currentProperty.Name `
-                    -Value $currentProperty.Value
-            }
-            # if the sourceobject DOES contain that property, check first if it's a container (psobject)
-            switch ($currentProperty.TypeNameOfValue) {
-                'System.Management.Automation.PSCustomObject' {
-                    # if it's a container, call this function on those subobjects (recursive)
-                    $this.MergePSObjects($sourceObject.PSObject.Properties[$currentProperty.Name].Value, $currentProperty.Value)
-                    break
-                }
-                Default {
-                    # if it's NOT a container, just overlay the value directly on top of it
-                    $sourceObject | Add-Member `
-                        -MemberType NoteProperty `
-                        -Name $currentProperty.Name `
-                        -Value $currentProperty.Value `
-                        -Force
-                    break
-                }
-            }
-        }
-    }
-
-    hidden [psobject] GetSettingsTypeValue([VRisingServerSettingsType]$settingsType, [string]$settingName) {
-        $defaultSettings = $null
-        $explicitSettings = $null
-        switch ($settingsType) {
-            ([VRisingServerSettingsType]::Host) {
-                $defaultSettings = $this.GetDefaultHostSettingsFile()
-                $explicitSettings = $this.GetHostSettingsFile()
-                break
-            }
-            ([VRisingServerSettingsType]::Game) {
-                $defaultSettings = $this.GetDefaultGameSettingsFile()
-                $explicitSettings = $this.GetGameSettingsFile()
-                break
-            }
-            ([VRisingServerSettingsType]::Voip) {
-                $defaultSettings = $this.GetDefaultVoipSettingsFile()
-                $explicitSettings = $this.GetVoipSettingsFile()
-                break
-            }
-        }
-        $this.MergePSObjects($defaultSettings, $explicitSettings)
-        if ([string]::IsNullOrWhiteSpace($settingName)) {
-            return $defaultSettings
-        } elseif ($settingName.Contains('*')) {
-            $matchedSettings = $this.GetSettingsKeys($defaultSettings, $null) -like $settingName
-            $filteredSettings = $this.FilterSettings($defaultSettings, $matchedSettings)
-            return $filteredSettings
-        } else {
-            return $this.GetSetting($defaultSettings, $settingName)
-        }
-    }
-
-    [psobject] GetHostSetting([string]$settingName) {
-        return $this.GetSettingsTypeValue([VRisingServerSettingsType]::Host, $settingName)
-    }
-
-    [psobject] GetGameSetting([string]$settingName) {
-        return $this.GetSettingsTypeValue([VRisingServerSettingsType]::Game, $settingName)
-    }
-
-    [psobject] GetVoipSetting([string]$settingName) {
-        return $this.GetSettingsTypeValue([VRisingServerSettingsType]::Voip, $settingName)
-    }
-
-    hidden [bool] ObjectsAreEqual([psobject]$a, [psobject]$b) {
-        # simple dumbed down recursive comparison function
-        # specifically for comparing values inside the [pscustomobject] from a loaded settings file
-        # does not handle complex types
-        $a_type = $a.GetType().Name
-        $b_type = $b.GetType().Name
-        if ($a_type -ne $b_type) {
-            return $false
-        }
-        switch ($a_type) {
-            'PSCustomObject' {
-                foreach ($property in $a.PSObject.Properties.GetEnumerator()) {
-                    if ($b.PSObject.Properties.Name -notcontains $property.Name) {
-                        return $false
-                    }
-                    $a_value = $property.Value
-                    $b_value = $b.PSObject.Properties[$property.Name].Value
-                    $expectedComparables = @(
-                        'System.Boolean',
-                        'System.Int32',
-                        'System.Decimal',
-                        'System.String')
-                    switch ($property.TypeNameOfValue) {
-                        'System.Object' {
-                            if ($false -eq $this.ObjectsAreEqual($a_value, $b_value)) {
-                                return $false
-                            }
-                            continue
-                        }
-                        { $_ -in $expectedComparables } {
-                            if ($a_value -cne $b_value) {
-                                return $false
-                            }
-                            continue
-                        }
-                        Default {
-                            throw [VRisingServerException]::New("ObjectsAreEqual unexpected type: $_")
-                        }
-                    }
-                }
-            }
-            Default {
-                return $a -eq $b
-            }
-        }
-        return $true
-    }
-
-    hidden [void] SetSettingsTypeValue([VRisingServerSettingsType]$settingsType, [string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
-        if ($true -eq [string]::IsNullOrWhiteSpace($settingName)) {
-            throw [VRisingServerException]::New("settingName cannot be null or empty", [System.ArgumentNullException]::New('settingName'))
-        }
-        try {
-            $this._settingsFileMutex.WaitOne()
-            # skip getting default value if it's being reset
-            $defaultValue = $null
-            if ($false -eq $resetToDefault) {
-                $defaultSettings = $null
-                switch ($settingsType) {
-                    ([VRisingServerSettingsType]::Host) {
-                        $defaultSettings = $this.GetDefaultHostSettingsFile()
-                        break
-                    }
-                    ([VRisingServerSettingsType]::Game) {
-                        $defaultSettings = $this.GetDefaultGameSettingsFile()
-                        break
-                    }
-                    ([VRisingServerSettingsType]::Voip) {
-                        $defaultSettings = $this.GetDefaultVoipSettingsFile()
-                        break
-                    }
-                }
-                # get default value
-                $defaultValue = $this.GetSetting($defaultSettings, $settingName)
-                # if default value matches suggested value, reset = true
-                if ($true -eq $this.ObjectsAreEqual($defaultValue, $settingValue)) {
-                    $resetToDefault = $true
-                }
-            }
-
-            # read the file
-            $explicitSettings = $null
-            $settingsFilePath = $null
-            switch ($settingsType) {
-                ([VRisingServerSettingsType]::Host) {
-                    $explicitSettings = $this.GetHostSettingsFile()
-                    $settingsFilePath = $this.GetHostSettingsFilePath()
-                    break
-                }
-                ([VRisingServerSettingsType]::Game) {
-                    $explicitSettings = $this.GetGameSettingsFile()
-                    $settingsFilePath = $this.GetGameSettingsFilePath()
-                    break
-                }
-                ([VRisingServerSettingsType]::Voip) {
-                    $explicitSettings = $this.GetVoipSettingsFile()
-                    $settingsFilePath = $this.GetVoipSettingsFilePath()
-                    break
-                }
-            }
-
-            # reset or modify the value
-            if ($true -eq $resetToDefault) {
-                $this.DeleteSetting($explicitSettings, $settingName)
-            } else {
-                $explicitSettings = $this.SetSetting($explicitSettings, $settingName, $settingValue)
-            }
-
-            # write the file
-            $explicitSettings | ConvertTo-Json | Out-File -LiteralPath $settingsFilePath
-        } finally {
-            # unlock mutex
-            $this._settingsFileMutex.ReleaseMutex()
-        }
-    }
-
-    [void] SetHostSetting([string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
-        $this.SetSettingsTypeValue([VRisingServerSettingsType]::Host, $settingName, $settingValue, $resetToDefault)
-        [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] Host Setting '$settingName' modified")
-    }
-
-    [void] SetGameSetting([string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
-        $this.SetSettingsTypeValue([VRisingServerSettingsType]::Game, $settingName, $settingValue, $resetToDefault)
-        [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] Game Setting '$settingName' modified")
-    }
-
-    [void] SetVoipSetting([string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
-        $this.SetSettingsTypeValue([VRisingServerSettingsType]::Voip, $settingName, $settingValue, $resetToDefault)
-        [VRisingServerLog]::Info("[$($this.ReadProperty('ShortName'))] Voip Setting '$settingName' modified")
-    }
-
     [void] KillMonitor() {}
 
     [void] StopMonitor() {}
@@ -1280,7 +744,7 @@ class VRisingServer {
     [void] RunMonitor() {
         $runLoop = $true
         while ($true -eq $runLoop) {
-            $properties = $this._server.ReadProperties(
+            $properties = $this._server._properties.ReadProperties(
                 'ShortName',
                 'RunProcessMonitor'
             )

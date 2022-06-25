@@ -19,7 +19,7 @@ function Invoke-VRisingServer {
         & $ExePath -persistentDataPath $DataDir -logFile $LogFile
     } finally {
         $exitCode = $LastExitCode
-        $server.WriteProperty('LastExitCode', [int]$exitCode)
+        $server._properties.WriteProperty('LastExitCode', [int]$exitCode)
         if ($exitCode -ne 0) {
             [VRisingServerLog]::Error("[$shortName] server exited with code $($exitCode)")
         }

@@ -1,3 +1,5 @@
+TODO: (in-progress) refactor to multiple classes now that psake is building a single-file
+
 TODO: wrap update and server processes inside a try/finally that will update the exit code?
       - is anything even checking exit codes right now? Nope...
       - THIS DIDN'T WORK... sending WM close stops the foreground process (VRisingServer) but then powershell immediately dies, so to address that:
