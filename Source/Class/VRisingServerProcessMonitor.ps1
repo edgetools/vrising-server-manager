@@ -32,17 +32,28 @@ class VRisingServerProcessMonitor {
                     switch ($activeCommand.CommandName) {
                         'Start' {
                             $this.LaunchServer()
-                            # TODO wait for server to start
+                            # TODO wait for server to start and stabilize for... 30 seconds?
                             break
                         }
                         'Stop' {
                             $this.KillServer($activeCommand.Force)
-                            # TODO wait for server to exit
+                            # TODO wait for server to exit and capture exit code
+                            break
+                        }
+                        'Update' {
+                            $this.LaunchUpdate()
+                            # TODO wait for update to exit and capture exit code
                             break
                         }
                     }
                     $this._properties.WriteProperty('ProcessMonitorActiveCommand', $null)
                     [VRisingServerLog]::Info("[$($properties.ShortName)] command processed: $($activeCommand.CommandName)")
+                }
+                if ($this.GetQueueDepth() -eq 0) {
+                    # TODO ? - don't exit the monitor unless nothing is running
+                    $runLoop = $false
+                    [VRisingServerLog]::Info("[$($properties.ShortName)] command queue empty")
+                    continue
                 }
                 Start-Sleep -Seconds $this.GetPollingRate()
             }
@@ -79,6 +90,20 @@ class VRisingServerProcessMonitor {
         )
         $this.LaunchMonitor()
         [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] sent Stop command")
+    }
+
+    [void] Update() {
+        if ($false -eq $this.IsEnabled()) {
+            [VRisingServerLog]::Error("[$($this._properties.ReadProperty('ShortName'))] cannot send Update command - server is disabled")
+            return
+        }
+        $this.AddCommandQueueItem(
+            [pscustomobject]@{
+                CommandName = 'Update'
+            }
+        )
+        $this.LaunchMonitor()
+        [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] sent Update command")
     }
 
     [void] Enable() {
@@ -175,6 +200,10 @@ class VRisingServerProcessMonitor {
         }
     }
 
+    hidden [int] GetQueueDepth() {
+        return $this._properties.ReadProperty('ProcessMonitorCommandQueue').Count
+    }
+
     hidden [void] EnsureDirPathExists([string]$dirPath) {
         if ($false -eq (Test-Path -LiteralPath $dirPath -PathType Container)) {
             New-Item -Path $dirPath -ItemType Directory | Out-Null
@@ -195,11 +224,56 @@ class VRisingServerProcessMonitor {
         return $this._queueMutex
     }
 
+    # start the update process
+    hidden [void] LaunchUpdate() {
+        if ($true -eq $this.UpdateIsRunning()) {
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] server has already started updating")
+            return
+        }
+        if ($true -eq $this.ServerIsRunning()) {
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] server must be stopped before updating")
+        }
+        $this._properties.WriteProperties(@{
+            UpdateProcessName = $null
+            UpdateProcessId = 0
+        })
+        $properties = $this._properties.ReadProperties(@(
+            'ShortName',
+            'LogDir',
+            'InstallDir'
+        ))
+        $this.EnsureDirPathExists($properties.LogDir)
+        $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastUpdate.Info.log"
+        $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastUpdate.Error.log"
+        $process = Start-Process `
+            -FilePath ([VRisingServer]::_config['SteamCmdPath']) `
+            -ArgumentList @(
+                '+force_install_dir', $properties.InstallDir,
+                '+login', 'anonymous',
+                '+app_update', [VRisingServer]::STEAM_APP_ID,
+                '+quit'
+            ) `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $stdoutLogFile `
+            -RedirectStandardError $stderrLogFile `
+            -PassThru
+        $this._properties.WriteProperties(@{
+            UpdateProcessName = $process.Name
+            UpdateProcessId = $process.Id
+            UpdateStdoutLogFile = $stdoutLogFile
+            UpdateStderrLogFile = $stderrLogFile
+        })
+        [VRisingServerLog]::Info("[$($properties.ShortName)] update launched")
+    }
+
     # start the server process
     hidden [void] LaunchServer() {
         if ($true -eq $this.ServerIsRunning()) {
             [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] server already running")
             return
+        }
+        if ($true -eq $this.UpdateIsRunning()) {
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] server is currently updating and cannot be started")
         }
         $this._properties.WriteProperties(@{
             ServerProcessName = $null
@@ -293,6 +367,10 @@ class VRisingServerProcessMonitor {
         return $this.ProcessIsRunning($this.GetServerProcess())
     }
 
+    hidden [bool] UpdateIsRunning() {
+        return $this.ProcessIsRunning($this.GetUpdateProcess())
+    }
+
     hidden [bool] ProcessIsRunning([System.Diagnostics.Process]$process) {
         if ($null -eq $process) {
             return $false
@@ -309,6 +387,10 @@ class VRisingServerProcessMonitor {
 
     hidden [System.Diagnostics.Process] GetServerProcess() {
         return $this.GetProcessByProperties('ServerProcessId', 'ServerProcessName')
+    }
+
+    hidden [System.Diagnostics.Process] GetUpdateProcess() {
+        return $this.GetProcessByProperties('UpdateProcessId', 'UpdateProcessName')
     }
 
     hidden [System.Diagnostics.Process] GetProcessByProperties([string]$processIdKey, [string]$processNameKey) {
