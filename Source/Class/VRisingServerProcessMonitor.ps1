@@ -31,11 +31,13 @@ class VRisingServerProcessMonitor {
                     [VRisingServerLog]::Info("[$($properties.ShortName)] processing command: $($activeCommand.CommandName)")
                     switch ($activeCommand.CommandName) {
                         'Start' {
-                            [VRisingServerLog]::Info("[$($properties.ShortName)] starting server")
+                            $this.LaunchServer()
+                            # TODO wait for server to start
                             break
                         }
                         'Stop' {
-                            [VRisingServerLog]::Info("[$($properties.ShortName)] stopping server")
+                            $this.KillServer($activeCommand.Force)
+                            # TODO wait for server to exit
                             break
                         }
                     }
@@ -60,10 +62,11 @@ class VRisingServerProcessMonitor {
                 CommandName = 'Start'
             }
         )
-        $this.Launch()
+        $this.LaunchMonitor()
+        [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] sent Start command")
     }
 
-    [void] Stop() {
+    [void] Stop([bool]$force) {
         if ($false -eq $this.IsEnabled()) {
             [VRisingServerLog]::Error("[$($this._properties.ReadProperty('ShortName'))] cannot send Stop command - server is disabled")
             return
@@ -71,9 +74,11 @@ class VRisingServerProcessMonitor {
         $this.AddCommandQueueItem(
             [pscustomobject]@{
                 CommandName = 'Stop'
+                Force = $force
             }
         )
-        $this.Launch()
+        $this.LaunchMonitor()
+        [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] sent Stop command")
     }
 
     [void] Enable() {
@@ -84,6 +89,7 @@ class VRisingServerProcessMonitor {
         } finally {
             $this.GetProcessMutex().ReleaseMutex()
         }
+        $this.LaunchMonitor()
     }
 
     [void] Disable() {
@@ -96,9 +102,10 @@ class VRisingServerProcessMonitor {
         }
     }
 
-    [void] Kill([bool]$force) {
-        if ($false -eq $this.IsRunning()) {
-           return
+    [void] KillMonitor([bool]$force) {
+        if ($false -eq $this.MonitorIsRunning()) {
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] monitor already stopped")
+            return
         }
         if ($true -eq $force) {
             [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] forcefully killing monitor process")
@@ -106,6 +113,19 @@ class VRisingServerProcessMonitor {
             [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] gracefully killing monitor process")
         }
         & taskkill.exe '/PID' $this._properties.ReadProperty('ProcessMonitorProcessId') $(if ($true -eq $force) { '/F' })
+    }
+
+    [void] KillServer([bool]$force) {
+        if ($false -eq $this.ServerIsRunning()) {
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] server already stopped")
+            return
+        }
+        if ($true -eq $force) {
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] forcefully killing server process")
+        } else {
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] gracefully killing server process")
+        }
+        & taskkill.exe '/PID' $this._properties.ReadProperty('ServerProcessId') $(if ($true -eq $force) { '/F' })
     }
 
     hidden [void] SetPollingRate([int]$pollingRate) {
@@ -175,16 +195,59 @@ class VRisingServerProcessMonitor {
         return $this._queueMutex
     }
 
+    # start the server process
+    hidden [void] LaunchServer() {
+        if ($true -eq $this.ServerIsRunning()) {
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] server already running")
+            return
+        }
+        $this._properties.WriteProperties(@{
+            ServerProcessName = $null
+            ServerProcessId = 0
+        })
+        $properties = $this._properties.ReadProperties(@(
+            'ShortName',
+            'LogDir',
+            'InstallDir',
+            'DataDir'
+        ))
+        $this.EnsureDirPathExists($properties.LogDir)
+        $logFile = $this._properties.GetLogFilePath([VRisingServerLogType]::File)
+        $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastRun.Info.log"
+        $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastRun.Error.log"
+        $serverExePath = Join-Path -Path $properties.InstallDir -ChildPath 'VRisingServer.exe'
+        try {
+            $process = Start-Process `
+                -WindowStyle Hidden `
+                -RedirectStandardOutput $stdoutLogFile `
+                -RedirectStandardError $stderrLogFile `
+                -FilePath $serverExePath `
+                -ArgumentList "-persistentDataPath `"$($properties.DataDir)`" -logFile `"$logFile`"" `
+                -PassThru
+        } catch [System.IO.DirectoryNotFoundException] {
+            throw [VRisingServerException]::New("[$($properties.ShortName)] server failed to start due to missing directory -- try running update first")
+        } catch [InvalidOperationException] {
+            throw [VRisingServerException]::New("[$($properties.ShortName)] server failed to start: $($_.Exception.Message)")
+        }
+        $this._properties.WriteProperties(@{
+            ServerProcessName = $process.Name
+            ServerProcessId = $process.Id
+            ServerStdoutLogFile = $stdoutLogFile
+            ServerStderrLogFile = $stderrLogFile
+        })
+        [VRisingServerLog]::Info("[$($properties.shortName)] server launched")
+    }
+
     # start the background process
-    hidden [void] Launch() {
+    hidden [void] LaunchMonitor() {
         # check before locking the mutex (so we don't unnecessarily block the thread)
-        if ($true -eq $this.IsRunning()) {
+        if ($true -eq $this.MonitorIsRunning()) {
             return
         }
         $this.GetProcessMutex().WaitOne()
         try {
             # check again just in case it was launched between checking the last statement and locking the mutex
-            if ($true -eq $this.IsRunning()) {
+            if ($true -eq $this.MonitorIsRunning()) {
                 return
             }
             $this._properties.WriteProperties(@{
@@ -222,8 +285,12 @@ class VRisingServerProcessMonitor {
         return $this._properties.ReadProperty('ProcessMonitorEnabled') -eq $true
     }
 
-    hidden [bool] IsRunning() {
+    hidden [bool] MonitorIsRunning() {
         return $this.ProcessIsRunning($this.GetMonitorProcess())
+    }
+
+    hidden [bool] ServerIsRunning() {
+        return $this.ProcessIsRunning($this.GetServerProcess())
     }
 
     hidden [bool] ProcessIsRunning([System.Diagnostics.Process]$process) {
@@ -238,6 +305,10 @@ class VRisingServerProcessMonitor {
 
     hidden [System.Diagnostics.Process] GetMonitorProcess() {
         return $this.GetProcessByProperties('ProcessMonitorProcessId', 'ProcessMonitorProcessName')
+    }
+
+    hidden [System.Diagnostics.Process] GetServerProcess() {
+        return $this.GetProcessByProperties('ServerProcessId', 'ServerProcessName')
     }
 
     hidden [System.Diagnostics.Process] GetProcessByProperties([string]$processIdKey, [string]$processNameKey) {
