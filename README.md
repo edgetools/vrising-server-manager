@@ -2,7 +2,7 @@
 
 Windows PowerShell cmdlets for easily managing multiple dedicated V Rising servers on a Windows machine
 
-![ci](https://github.com/edgetools/vrising-server-manager/actions/workflows/ci.yaml/badge.svg?event=push)
+[![ci](https://github.com/edgetools/vrising-server-manager/actions/workflows/ci.yaml/badge.svg?event=push)](https://github.com/edgetools/vrising-server-manager/actions/workflows/ci.yaml?query=branch%3Amain++)
 
 ## Features
 
