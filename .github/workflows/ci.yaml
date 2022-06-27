@@ -38,7 +38,7 @@ jobs:
       - name: prepare environment
         run: |
           Write-Host "Using PowerShell v$($PSVersionTable.PSVersion.ToString())"
-          Install-Module @('Pester','psake')
+          Install-Module @('Pester','psake') -Force
 
       - name: create package
         run: |
