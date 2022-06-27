@@ -2,6 +2,8 @@
 
 Windows PowerShell cmdlets for easily managing multiple dedicated V Rising servers on a Windows machine
 
+![example workflow](https://github.com/edgetools/vrising-server-manager/actions/workflows/ci.yaml/badge.svg)
+
 ## Features
 
 - Out-of-box support for PowerShell 5.1+ (already included in most modern Windows installations)
