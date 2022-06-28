@@ -1,5 +1,4 @@
 properties {
-    $moduleVersion = $env:MODULE_BUILD_VERSION
     $moduleFilePath = "$PSScriptRoot\VRisingServerManager\VRisingServerManager.psm1"
     $moduleManifestFilePath = "$PSScriptRoot\VRisingServerManager\VRisingServerManager.psd1"
     $moduleDirPath = "$PSScriptRoot\VRisingServerManager"
@@ -13,6 +12,9 @@ properties {
     $packageFilesDirPath = "$PSScriptRoot\Package"
 
     $licenseFilePath = "$PSScriptRoot\LICENSE.txt"
+
+    $moduleVersion = $null
+    $releaseNotes =  $null
 }
 
 Task default -Depends Clean, Build
@@ -23,7 +25,12 @@ Task Clean {
     }
 }
 
-Task Build -Depends EnsureModuleDirExists, CombineSourceFragments, CopyPackageFiles, CopyLicenseFile, SetModuleVersion
+Task Build -Depends `
+    EnsureModuleDirExists, `
+    CombineSourceFragments, `
+    CopyPackageFiles, `
+    CopyLicenseFile, `
+    RunScriptAnalyzer
 
 Task EnsureModuleDirExists {
     if ($false -eq (Test-Path -LiteralPath $moduleDirPath -PathType Container)) {
@@ -57,13 +64,27 @@ Task CopyLicenseFile {
 }
 
 Task SetModuleVersion {
-    $versionToUse = $null
-    if ($false -eq [string]::IsNullOrWhiteSpace($moduleVersion)) {
-        $versionToUse = $moduleVersion
+    if ($true -eq [string]::IsNullOrWhiteSpace($moduleVersion)) {
+        throw [System.ArgumentNullException]::New('moduleVersion')
     }
-    if ($null -ne $versionToUse) {
-        Update-ModuleManifest `
-            -Path $moduleManifestFilePath `
-            -ModuleVersion $versionToUse
+    Update-ModuleManifest `
+        -Path $moduleManifestFilePath `
+        -ModuleVersion $moduleVersion
+}
+
+Task SetReleaseNotes {
+    if ($true -eq [string]::IsNullOrWhiteSpace($releaseNotes)) {
+        throw [System.ArgumentNullException]::New('releaseNotes')
+    }
+    Update-ModuleManifest `
+        -Path $moduleManifestFilePath `
+        -ReleaseNotes $releaseNotes
+}
+
+Task RunScriptAnalyzer {
+    $analysis = Invoke-ScriptAnalyzer -Path $moduleDirPath -Recurse -Settings PSGallery -Severity Warning
+    if ($analysis.Count -gt 0) {
+        $analysis
+        throw "unresolved script issues found"
     }
 }

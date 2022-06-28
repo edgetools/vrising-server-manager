@@ -4,12 +4,6 @@ name: CI
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
@@ -38,8 +32,8 @@ jobs:
       - name: prepare environment
         run: |
           Write-Host "Using PowerShell v$($PSVersionTable.PSVersion.ToString())"
-          Install-Module @('Pester','psake') -Force
+          Install-Module @('psake') -Force
+          npm install -g @semantic-release/exec conventional-changelog-conventionalcommits
 
       - name: create package
-        run: |
-          Invoke-Psake -taskList clean,build
+        run: Invoke-psake -taskList clean,build; exit (!$psake.build_success)

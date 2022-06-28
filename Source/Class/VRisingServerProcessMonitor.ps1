@@ -42,6 +42,13 @@ class VRisingServerProcessMonitor {
                         }
                         'Update' {
                             $this.LaunchUpdate()
+                            while ($true -eq $this.UpdateIsRunning()) {
+                                # asdf
+                            }
+                            $updateProcess = $this.GetUpdateProcess()
+                            if ($null -ne $updateProcess) {
+                                $updateExitCode = $updateProcess.ExitCode
+                            }
                             # TODO wait for update to exit and capture exit code
                             break
                         }
@@ -51,6 +58,7 @@ class VRisingServerProcessMonitor {
                 }
                 if ($this.GetQueueDepth() -eq 0) {
                     # TODO ? - don't exit the monitor unless nothing is running
+                    # or do we even need to monitor running processes?
                     $runLoop = $false
                     [VRisingServerLog]::Info("[$($properties.ShortName)] command queue empty")
                     continue
