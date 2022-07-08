@@ -10,6 +10,7 @@ param(
     [switch]$BumpVersion,
     [switch]$UpdateChangelog,
     [switch]$UpdateReleaseNotes,
+    [switch]$Publish,
     [switch]$LibraryMode
 )
 
@@ -243,11 +244,76 @@ function GetCommitLogFormatString() {
     return "${rawBody}${trimNewline}${sep}${shortHash}${sep}${fullHash}"
 }
 
-function GetCommitLogUsingGit() {
+function GetLatestSemanticGitTag() {
+    $tags = git tag --list
+    if ($LASTEXITCODE -ne 0) {
+        throw "git command failed"
+    }
+    $semanticVersions = $tags | Where-Object { $_ -match '\d+\.\d+\.\d+' } | ForEach-Object { GetSemanticVersion $_ }
+    $latestTag = $semanticVersions | Sort-Object Major,Minor,Patch -Descending | Select-Object -First 1
+    return $latestTag
+}
+
+function GitTagExists($tag) {
+    $gitTagOutput = git tag --list "$tag"
+    if ($LASTEXITCODE -ne 0) {
+        throw "git command failed"
+    }
+    $gitTag = ($gitTagOutput | Out-String).TrimEnd()
+    return $tag -eq $gitTag
+}
+
+function GetRefForVersion($version) {
+    if ([string]::IsNullOrWhiteSpace($version)) {
+        throw "version cannot be null"
+    }
+    $versionTagExists = GitTagExists $version
+    if ($true -eq $versionTagExists) {
+        return "refs/tags/$version"
+    }
+    return $null
+}
+
+function GitTagVersion($version) {
+    if ([string]::IsNullOrWhiteSpace($version)) {
+        throw "version cannot be null"
+    }
+    git tag $version
+    if ($LASTEXITCODE -ne 0) {
+        throw "git command failed"
+    }
+}
+
+function GitAddFiles([string[]]$files) {
+    foreach ($file in $files) {
+        git add $file
+        if ($LASTEXITCODE -ne 0) {
+            throw "git command failed"
+        }
+    }
+}
+
+function CreateReleaseCommit([string]$version) {
+    git commit -m "chore: [skip ci] release $version"
+    if ($LASTEXITCODE -ne 0) {
+        throw "git command failed"
+    }
+}
+
+function GetCommitLogUsingGit($startRef) {
     # --no-pager: ensure it doesn't paginate
     # -z: separate with NULL char
     # --format: custom format
-    return git --no-pager log -z --format=$(GetCommitLogFormatString) | Out-String
+    $commitLog = $null
+    if ($false -eq [string]::IsNullOrWhiteSpace($startRef)) {
+        $commitLog = git --no-pager log -z --format=$(GetCommitLogFormatString) "$startRef..HEAD" | Out-String
+    } else {
+        $commitLog = git --no-pager log -z --format=$(GetCommitLogFormatString) | Out-String
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "git command failed"
+    }
+    return $commitLog
 }
 
 function ParseGitCommitLog($commitLog) {
@@ -262,7 +328,8 @@ function ParseGitCommitLog($commitLog) {
         }
         [void] $commits.Add($commit)
     }
-    return $commits.ToArray([hashtable])
+    Write-Output $commits.ToArray([hashtable]) -NoEnumerate
+    return
 }
 
 function IsFooter($commitLine) {
@@ -368,7 +435,8 @@ function ConvertFootersIntoKeyValue($footers) {
         }
         [void] $footerMap.Add($match)
     }
-    return $footerMap.ToArray()
+    Write-Output $footerMap.ToArray() -NoEnumerate
+    return
 }
 
 function PruneCommitBody([string]$commitBody, [string[]]$prunePatterns) {
@@ -395,7 +463,8 @@ function ParseCommitBodies($commits, [string[]]$prunePatterns) {
         }
         [void] $commitsWithBodySegments.Add($commitWithBodySegments)
     }
-    return $commitsWithBodySegments.ToArray()
+    Write-Output $commitsWithBodySegments.ToArray() -NoEnumerate
+    return
 }
 
 function ParseConventionalCommitSubjectForDetails($subject) {
@@ -453,6 +522,8 @@ function IdentifyBreakingFooters($footers) {
             [void] $otherFooters.Add($footer)
         }
     }
+    # this doesn't need Write-Output -NoEnumerate because we're intentionally returning two objects
+    # so even if one is a single object, it won't get unraveled
     return $breakingFooters.ToArray(),$otherFooters.ToArray()
 }
 
@@ -461,7 +532,28 @@ function UnwrapBreakingFooters($breakingFooters) {
     foreach ($footer in $breakingFooters) {
         [void] $unwrappedBreakingFooters.Add($footer.Value)
     }
-    return $unwrappedBreakingFooters.ToArray([string])
+    Write-Output $unwrappedBreakingFooters.ToArray([string]) -NoEnumerate
+    return
+}
+
+function GetSeverityForType($commitTypes, $commitType) {
+    if (($false -eq [string]::IsNullOrWhiteSpace($commitType)) -and
+            ($commitTypes.ContainsKey($commitType))) {
+        return $commitTypes[$commitType].Severity
+    } elseif ($commitTypes.ContainsKey('*')) {
+        return $commitTypes['*'].Severity
+    } else {
+        throw "unrecognized commit type: $commitType"
+    }
+}
+
+function GetSeverityForCommit($isBreaking, $commitTypes, $commitType) {
+    if ($true -eq $isBreaking) {
+        $commitSeverity = 'Major'
+    } else {
+        $commitSeverity = GetSeverityForType $commitTypes $commitType
+    }
+    return $commitSeverity
 }
 
 function GetConventionalCommits($changelogCategories, $commitTypes, $commits) {
@@ -471,6 +563,9 @@ function GetConventionalCommits($changelogCategories, $commitTypes, $commits) {
             $conventionalCommitDetails = ParseConventionalCommitSubjectForDetails $commit.Subject
             $breakingFooters, $otherFooters = IdentifyBreakingFooters $commit.Footers
             $unwrappedBreakingFooters = UnwrapBreakingFooters $breakingFooters
+            $isBreaking = (($true -eq $conventionalCommitDetails.IsBreaking) -or
+                ($unwrappedBreakingFooters.Count -gt 0))
+            $severity = GetSeverityForCommit $isBreaking $commitTypes $conventionalCommitDetails.Type
             $changelogCategory = GetChangelogCategoryForType `
                 $changelogCategories `
                 $commitTypes `
@@ -479,6 +574,7 @@ function GetConventionalCommits($changelogCategories, $commitTypes, $commits) {
                 Type = $conventionalCommitDetails.Type
                 Scope = $conventionalCommitDetails.Scope
                 Subject = $conventionalCommitDetails.Subject
+                Severity = $severity
                 BreakingFlag = $conventionalCommitDetails.IsBreaking
                 ChangelogCategory = $changelogCategory
                 BreakingFooters = $unwrappedBreakingFooters
@@ -489,9 +585,9 @@ function GetConventionalCommits($changelogCategories, $commitTypes, $commits) {
             [void] $conventionalCommits.Add($conventionalCommit)
         }
     }
-    return $conventionalCommits.ToArray()
+    Write-Output $conventionalCommits.ToArray() -NoEnumerate
+    return
 }
-
 
 function GetSemanticVersion($versionString) {
     $major, $minor, $patch = $versionString -split '\.'
@@ -539,6 +635,16 @@ function BumpSemanticVersion($semanticVersion, $versionChange, $allowBumpZeroMaj
     #   0.0.1 -> Major -> 0.1.0
     #   0.0.1 -> Minor -> 0.1.0
     #   0.0.1 -> Patch -> 0.0.2
+    if ($true -eq [string]::IsNullOrWhiteSpace($versionChange)) {
+        # this allows a null input version to return a null output version
+        # (an effective no-op when versions are compared after)
+        return $semanticVersion
+    }
+    if ($null -eq $semanticVersion) {
+        # default to 0.0.0
+        # then bump according to the instructed bump
+        $semanticVersion = GetSemanticVersion '0.0.0'
+    }
     if ('Major' -eq $versionChange) {
         if (($semanticVersion.Major -eq 0) -and ($true -ne $allowBumpZeroMajor)) {
             return BumpMinorVersion $semanticVersion
@@ -549,33 +655,10 @@ function BumpSemanticVersion($semanticVersion, $versionChange, $allowBumpZeroMaj
         return BumpMinorVersion $semanticVersion
     } elseif ('Patch' -eq $versionChange) {
         return BumpPatchVersion $semanticVersion
-    } else {
-        return $semanticVersion
     }
 }
 
-function GetSeverityForType($commitTypes, $commitType) {
-    if (($false -eq [string]::IsNullOrWhiteSpace($commitType)) -and
-            ($commitTypes.ContainsKey($commitType))) {
-        return $commitTypes[$commitType].Severity
-    } elseif ($commitTypes.ContainsKey('*')) {
-        return $commitTypes['*'].Severity
-    } else {
-        throw "unrecognized commit type: $commitType"
-    }
-}
-
-function GetVersionChangeForType($isBreaking, $commitTypes, $commitType) {
-    $severity = $null
-    if ($true -eq $isBreaking) {
-        $severity = 'Major'
-    } else {
-        $severity = GetSeverityForType $commitTypes $commitType
-    }
-    return $severity
-}
-
-function GetVersionChangeFromCommits($commitTypes, $conventionalCommits) {
+function GetVersionChangeFromCommits($conventionalCommits) {
     # this is a 'batch style' method
     # which means it will take a list of version changes and
     # batch them into a single change
@@ -583,29 +666,15 @@ function GetVersionChangeFromCommits($commitTypes, $conventionalCommits) {
     #   Major, Major, Minor -> Major
     #   Minor, Minor, Patch -> Minor
     #   Patch, Patch, Patch -> Patch
-    $versionChanges = [System.Collections.ArrayList]::New()
-    foreach ($commit in $conventionalCommits) {
-        $isBreaking = (($true -eq $commit.BreakingFlag) -or
-                        ($commit.BreakingFooters.Count -gt 0))
-        $versionChange = GetVersionChangeForType `
-            $isBreaking `
-            $commitTypes `
-            $commit.Type
-        [void] $versionChanges.Add($versionChange)
-    }
-    if ('Major' -in $versionChanges) {
+    $commitSeverityList = $conventionalCommits |
+        ForEach-Object { $_.Severity }
+    if ('Major' -in $commitSeverityList) {
         return 'Major'
-    } elseif ('Minor' -in $versionChanges) {
+    } elseif ('Minor' -in $commitSeverityList) {
         return 'Minor'
-    } elseif ('Patch' -in $versionChanges) {
+    } elseif ('Patch' -in $commitSeverityList) {
         return 'Patch'
     }
-}
-
-function ReadModuleVersion($manifestPath) {
-    $dataFile = Import-PowerShellDataFile -LiteralPath $manifestPath
-    $semanticVersion = GetSemanticVersion $dataFile.ModuleVersion
-    return $semanticVersion
 }
 
 function WriteModuleVersion($semanticVersion, $manifestPath) {
@@ -649,6 +718,10 @@ function GenerateChangelogFromCommits($changelogCategories, [hashtable[]]$conven
                     Text = $footer
                 }
             )
+        }
+        if ($null -eq $commit.Severity) {
+            # skip adding commits without a severity
+            continue
         }
         $changelog[$categoryName] += @(
             @{
@@ -727,6 +800,14 @@ function UpdateChangelog($oldChangelog, $newHeader, $newChangelog) {
     return $updatedChangelog -join ''
 }
 
+function PickVersionToUse($tagVersion, $fileVersion) {
+    if ($null -ne $tagVersion) {
+        return $tagVersion
+    } else {
+        return $fileVersion
+    }
+}
+
 function DoTestCommits() {
     $rcFile = LoadRunCommandsFile
     $commitsWithParsedBodies = ParseCommitBodies $testCommits $rcFile.PrunePatterns
@@ -799,11 +880,26 @@ function LoadRunCommandsFile() {
     }
 }
 
-function DoMain([bool]$bumpVersion, [bool]$updateChangelog, [bool]$updateReleaseNotes) {
+function DoMain() {
     $rcFile = LoadRunCommandsFile
-    $commitLog = GetCommitLogUsingGit
+    $previousVersion = GetLatestSemanticGitTag
+    if ($false -eq [string]::IsNullOrWhiteSpace($previousVersion)) {
+        Write-Host "Previous version is $(GetStringVersion $previousVersion)"
+    } else {
+        Write-Host "No previous version found"
+    }
+    $lastReleaseRef = GetRefForVersion $(GetStringVersion $previousVersion)
+    $commitLog = GetCommitLogUsingGit $lastReleaseRef
     $commitsFromLog = ParseGitCommitLog $commitLog
-    Write-Host "Found $($commitsFromLog.Count) commits in repo"
+    if ($false -eq [string]::IsNullOrWhiteSpace($lastReleaseRef)) {
+        Write-Host "Found $($commitsFromLog.Count) commits in repo since $lastReleaseRef"
+    } else {
+        Write-Host "Found $($commitsFromLog.Count) commits in repo"
+    }
+    if ($commitsFromLog.Count -eq 0) {
+        Write-Warning "No commits found"
+        return
+    }
     $commitsWithParsedBodies = ParseCommitBodies `
         $commitsFromLog `
         $rcFile.PrunePatterns
@@ -812,20 +908,19 @@ function DoMain([bool]$bumpVersion, [bool]$updateChangelog, [bool]$updateRelease
         $rcFile.CommitTypes `
         $commitsWithParsedBodies
     Write-Host "Found $($conventionalCommits.Count) conventional commits"
-    $moduleVersion = ReadModuleVersion $rcFile.ModuleManifestFilePath
-    Write-Host "Current module version is $(GetStringVersion $moduleVersion)"
-    $versionChange = GetVersionChangeFromCommits $rcFile.CommitTypes $conventionalCommits
-    $nextVersion = BumpSemanticVersion $moduleVersion $versionChange $rcFile.AllowBumpZeroMajor
-    $versionsAreEqual = VersionsAreEqual $moduleVersion $nextVersion
+    if ($conventionalCommits.Count -eq 0) {
+        Write-Warning "No conventional commits found"
+        return
+    }
+    $versionChange = GetVersionChangeFromCommits $conventionalCommits
+    $nextVersion = BumpSemanticVersion $previousVersion $versionChange $rcFile.AllowBumpZeroMajor
+    $versionsAreEqual = VersionsAreEqual $previousVersion $nextVersion
     if ($true -eq $versionsAreEqual) {
         Write-Warning "No version changes detected"
+        return
     }
-    if ($true -eq $bumpVersion) {
-        WriteModuleVersion $nextVersion $rcFile.ModuleManifestFilePath
-        Write-Host "Updated module version to $(GetStringVersion $nextVersion)"
-    } else {
-        Write-Host "New module version would be $(GetStringVersion $nextVersion)"
-    }
+    Write-Host "Executing $versionChange bump to next version $(GetStringVersion $nextVersion)"
+    # changelog
     $changelog = GenerateChangelogFromCommits `
         $rcFile.ChangelogCategories `
         $conventionalCommits
@@ -833,22 +928,36 @@ function DoMain([bool]$bumpVersion, [bool]$updateChangelog, [bool]$updateRelease
     $renderedChangelog = RenderChangelog `
         $rcFile.RepoUri `
         $(GetStringVersion $nextVersion) `
-        $(GetStringVersion $moduleVersion) `
+        $(GetStringVersion $previousVersion) `
         $changelog
+    Write-Host "--- changelog ---"
     $renderedChangelogHeader
     $renderedChangelog
-    if ($true -eq $updateReleaseNotes) {
-        Update-ModuleManifest `
-            -Path $rcFile.ModuleManifestFilePath `
-            -ReleaseNotes $renderedChangelog
-    }
-    if ($true -eq $updateChangelog) {
-        $changelogFileContent = ReadChangelogFile $rcFile.ChangelogFilePath
-        $updatedChangelogFileContent = UpdateChangelog $changelogFileContent $renderedChangelogHeader $renderedChangelog
-        WriteChangelogFile $rcFile.ChangelogFilePath $updatedChangelogFileContent
-    }
+    Write-Host "-----------------"
+    # update release notes
+    Update-ModuleManifest `
+        -Path $rcFile.ModuleManifestFilePath `
+        -ReleaseNotes $renderedChangelog
+    Write-Host "Added release notes to $($rcFile.ModuleManifestFilePath)"
+    # update changelog
+    $changelogFileContent = ReadChangelogFile $rcFile.ChangelogFilePath
+    $updatedChangelogFileContent = UpdateChangelog $changelogFileContent $renderedChangelogHeader $renderedChangelog
+    WriteChangelogFile $rcFile.ChangelogFilePath $updatedChangelogFileContent
+    Write-Host "Wrote changelog to $($rcFile.ChangelogFilePath)"
+    # bump version
+    WriteModuleVersion $nextVersion $rcFile.ModuleManifestFilePath
+    Write-Host "Updated module version to $(GetStringVersion $nextVersion)"
+    # add updated files to release commit
+    GitAddFiles $rcFile.ChangelogFilePath
+    Write-Host "Added updated changelog to commit"
+    # create release commit
+    CreateReleaseCommit $(GetStringVersion $nextVersion)
+    Write-Host "Created release commit"
+    # tag the release
+    GitTagVersion $(GetStringVersion $nextVersion)
+    Write-Host "Tagged release $(GetStringVersion $nextVersion)"
 }
 
 if ($false -eq $LibraryMode) {
-    DoMain $BumpVersion $UpdateChangelog $UpdateReleaseNotes
+    DoMain
 }
