@@ -265,7 +265,7 @@ function GitTagExists($tag) {
 
 function GetRefForVersion($version) {
     if ([string]::IsNullOrWhiteSpace($version)) {
-        throw "version cannot be null"
+        return $null
     }
     $versionTagExists = GitTagExists $version
     if ($true -eq $versionTagExists) {
@@ -599,6 +599,9 @@ function GetSemanticVersion($versionString) {
 }
 
 function GetStringVersion($semanticVersion) {
+    if ($null -eq $semanticVersion) {
+        return $null
+    }
     $versionString = "$($semanticVersion.Major).$($semanticVersion.Minor).$($semanticVersion.Patch)"
     return $versionString
 }
@@ -808,6 +811,13 @@ function PickVersionToUse($tagVersion, $fileVersion) {
     }
 }
 
+function UpdateModuleManifest($path, $newVersion, $releaseNotes) {
+    Update-ModuleManifest `
+        -Path $path `
+        -ModuleVersion $newVersion `
+        -ReleaseNotes $releaseNotes
+}
+
 function DoTestCommits() {
     $rcFile = LoadRunCommandsFile
     $commitsWithParsedBodies = ParseCommitBodies $testCommits $rcFile.PrunePatterns
@@ -930,22 +940,20 @@ function DoMain() {
         $(GetStringVersion $nextVersion) `
         $(GetStringVersion $previousVersion) `
         $changelog
-    Write-Host "--- changelog ---"
+    Write-Host "--- CHANGELOG ---"
     $renderedChangelogHeader
     $renderedChangelog
     Write-Host "-----------------"
-    # update release notes
-    Update-ModuleManifest `
-        -Path $rcFile.ModuleManifestFilePath `
-        -ReleaseNotes $renderedChangelog
-    Write-Host "Added release notes to $($rcFile.ModuleManifestFilePath)"
     # update changelog
     $changelogFileContent = ReadChangelogFile $rcFile.ChangelogFilePath
     $updatedChangelogFileContent = UpdateChangelog $changelogFileContent $renderedChangelogHeader $renderedChangelog
     WriteChangelogFile $rcFile.ChangelogFilePath $updatedChangelogFileContent
     Write-Host "Wrote changelog to $($rcFile.ChangelogFilePath)"
-    # bump version
-    WriteModuleVersion $nextVersion $rcFile.ModuleManifestFilePath
+    # update manifest
+    UpdateModuleManifest `
+        $rcFile.ModuleManifestFilePath `
+        $(GetStringVersion $nextVersion) `
+        $renderedChangelog
     Write-Host "Updated module version to $(GetStringVersion $nextVersion)"
     # add updated files to release commit
     GitAddFiles $rcFile.ChangelogFilePath
