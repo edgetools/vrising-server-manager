@@ -1,7 +1,7 @@
 @{
     RepoUri = 'https://www.github.com/edgetools/vrising-server-manager'
-    CommitterName = 'edgetools-ci'
-    CommitterEmail = '54470821+edgetools-ci@users.noreply.github.com'
+    AuthorName = 'edgetools-ci'
+    AuthorEmail = '54470821+edgetools-ci@users.noreply.github.com'
     PushBranch = 'main'
     AllowBumpZeroMajor = $false
     ModuleDirPath = Join-Path -Path $PSScriptRoot -ChildPath 'VRisingServerManager'

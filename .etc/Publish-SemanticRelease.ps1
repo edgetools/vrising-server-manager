@@ -296,12 +296,12 @@ function GitAddFiles([string[]]$files) {
 }
 
 function CreateReleaseCommit(
-        [string]$committerName,
-        [string]$committerEmail,
+        [string]$authorName,
+        [string]$authorEmail,
         [string]$version) {
     git `
-        -c "committer.name=$committerName" `
-        -c "committer.email=$committerEmail" `
+        -c "user.name=$authorName" `
+        -c "user.email=$authorEmail" `
         commit -m "chore: [skip ci] release $version"
     if ($LASTEXITCODE -ne 0) {
         throw "git command failed"
@@ -933,8 +933,8 @@ function DoMain(
         Write-Warning "-- DRY RUN -- Would create release commit"
     } else {
         CreateReleaseCommit `
-            $rcFile.CommitterName `
-            $rcFile.CommitterEmail `
+            $rcFile.AuthorName `
+            $rcFile.AuthorEmail `
             $(GetStringVersion $nextVersion)
         Write-Host "Created release commit"
     }
