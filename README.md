@@ -34,7 +34,7 @@ These features will be added in future releases
 
 - Archive save files
 
-# Documentation
+# Table of Contents
 
 [Requirements](#requirements)
 
