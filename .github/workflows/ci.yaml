@@ -32,7 +32,7 @@ jobs:
       - name: prepare environment
         run: |
           Write-Host "Using PowerShell v$($PSVersionTable.PSVersion.ToString())"
-          Install-Module @('psake') -Force -Verbose
+          Install-Module @('psake') -Force -Verbose -AllowClobber
 
       - name: create package
         run: Invoke-psake -taskList clean,build; exit (!$psake.build_success)
