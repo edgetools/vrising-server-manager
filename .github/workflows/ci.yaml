@@ -32,8 +32,7 @@ jobs:
       - name: prepare environment
         run: |
           Write-Host "Using PowerShell v$($PSVersionTable.PSVersion.ToString())"
-          Install-Module @('psake') -Force
-          npm install -g @semantic-release/exec conventional-changelog-conventionalcommits
+          Install-Module @('psake') -Force -Verbose
 
       - name: create package
         run: Invoke-psake -taskList clean,build; exit (!$psake.build_success)
