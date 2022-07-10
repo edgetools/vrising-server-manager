@@ -6,7 +6,7 @@
 # inspired by the semantic-release and conventional-commits projects
 # https://www.conventionalcommits.org/en/v1.0.0/#summary
 
-[CmdletBinding(DefaultParameterSetName='Publish')]
+[CmdletBinding(DefaultParameterSetName='Publish', SupportsShouldProcess)]
 param(
     [Parameter(ParameterSetName='Publish')]
     [switch]$Publish,
@@ -846,6 +846,7 @@ function LoadRunCommandsFile() {
 }
 
 function DoMain(
+        [bool]$dryRun,
         [bool]$publish,
         [string]$apiKey) {
     $rcFile = LoadRunCommandsFile
@@ -904,42 +905,70 @@ function DoMain(
     # update changelog
     $changelogFileContent = ReadChangelogFile $rcFile.ChangelogFilePath
     $updatedChangelogFileContent = UpdateChangelog $changelogFileContent $renderedChangelogHeader $renderedChangelog
-    WriteChangelogFile $rcFile.ChangelogFilePath $updatedChangelogFileContent
+    if ($dryRun -eq $true) {
+        Write-Warning "-- DRY RUN -- would write updated changelog to disk"
+    } else {
+        WriteChangelogFile $rcFile.ChangelogFilePath $updatedChangelogFileContent
+    }
     Write-Host "Wrote changelog to $($rcFile.ChangelogFilePath)"
     # update manifest
-    UpdateModuleManifest `
-        $rcFile.ModuleManifestFilePath `
-        $(GetStringVersion $nextVersion) `
-        $renderedChangelog
+    if ($dryRun -eq $true) {
+        Write-Warning "-- DRY RUN -- would update module manifest"
+    } else {
+        UpdateModuleManifest `
+            $rcFile.ModuleManifestFilePath `
+            $(GetStringVersion $nextVersion) `
+            $renderedChangelog
+    }
     Write-Host "Updated module version to $(GetStringVersion $nextVersion)"
     # add updated files to release commit
-    GitAddFiles $rcFile.ChangelogFilePath
+    if ($dryRun -eq $true) {
+        Write-Warning "-- DRY RUN -- would add updated changelog to commit"
+    } else {
+        GitAddFiles $rcFile.ChangelogFilePath
+    }
     Write-Host "Added updated changelog to commit"
     # create release commit
-    CreateReleaseCommit `
-        $rcFile.CommitterName `
-        $rcFile.CommitterEmail `
-        $(GetStringVersion $nextVersion)
+    if ($dryRun -eq $true) {
+        Write-Warning "-- DRY RUN -- would create release commit"
+    } else {
+        CreateReleaseCommit `
+            $rcFile.CommitterName `
+            $rcFile.CommitterEmail `
+            $(GetStringVersion $nextVersion)
+    }
     Write-Host "Created release commit"
     # tag the release
-    GitTagVersion $(GetStringVersion $nextVersion)
+    if ($dryRun -eq $true) {
+        Write-Warning "-- DRY RUN -- would tag release"
+    } else {
+        GitTagVersion $(GetStringVersion $nextVersion)
+    }
     Write-Host "Tagged release $(GetStringVersion $nextVersion)"
     if ($true -eq $publish) {
         # ensure module is valid
         Test-ModuleManifest -Path $rcFile.ModuleManifestFilePath
-        PushGitRepo `
-            $rcFile.PushBranch `
-            $(GetStringVersion $nextVersion)
+        if ($dryRun -eq $true) {
+            Write-Warning "-- DRY RUN -- would push release to origin"
+        } else {
+            PushGitRepo `
+                $rcFile.PushBranch `
+                $(GetStringVersion $nextVersion)
+        }
         Write-Host "Pushed release $(GetStringVersion $nextVersion) to origin"
-        Publish-Module `
-            -Repository 'PSGallery' `
-            -Path $rcFile.ModuleDirPath `
-            -NuGetApiKey $apiKey `
-            -Force
+        if ($dryRun -eq $true) {
+            Write-Warning "-- DRY RUN -- would publish module to PowerShellGallery"
+        } else {
+            Publish-Module `
+                -Repository 'PSGallery' `
+                -Path $rcFile.ModuleDirPath `
+                -NuGetApiKey $apiKey `
+                -Force
+        }
         Write-Host "Published release $(GetStringVersion $nextVersion) to PowerShellGallery"
     }
 }
 
 if ($false -eq $LibraryMode) {
-    DoMain $Publish $ApiKey
+    DoMain $WhatIfPreference $Publish $ApiKey
 }
