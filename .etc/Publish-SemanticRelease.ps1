@@ -7,6 +7,7 @@
 # https://www.conventionalcommits.org/en/v1.0.0/#summary
 
 param(
+    [CmdletBinding(DefaultParameterSetName='Publish')]
     [Parameter(ParameterSetName='Publish')]
     [switch]$Publish,
     [Parameter(ParameterSetName='Publish')]
