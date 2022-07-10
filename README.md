@@ -2,29 +2,39 @@
 
 Windows PowerShell cmdlets for easily managing multiple dedicated V Rising servers on a Windows machine
 
-[![ci](https://github.com/edgetools/vrising-server-manager/actions/workflows/ci.yaml/badge.svg?event=push)](https://github.com/edgetools/vrising-server-manager/actions/workflows/ci.yaml?query=branch%3Amain++)
+[![module](https://img.shields.io/powershellgallery/dt/VRisingServerManager)](https://www.powershellgallery.com/packages/VRisingServerManager/) [![main](https://github.com/edgetools/vrising-server-manager/actions/workflows/release.yaml/badge.svg)](https://github.com/edgetools/vrising-server-manager/actions/workflows/release.yaml?query=branch%3Amain++) [![main-auto](https://github.com/edgetools/vrising-server-manager/actions/workflows/release-dry-run.yaml/badge.svg?event=push)](https://github.com/edgetools/vrising-server-manager/actions/workflows/release-dry-run.yaml?query=branch%3Amain++)
+
+_Ready to install? Jump to [Installation](#installation)_
 
 ## Features
 
-- Out-of-box support for PowerShell 5.1+ (already included in most modern Windows installations)
+- Out-of-box support for PowerShell 5.1+ (which is already included in most modern Windows installations)
 
-- Servers run in their own process so you can close the PowerShell window
+- Start, Stop, Restart multiple servers with a service-like command interface
 
-- Automatically update server on start
-
-- Automatically restart servers on a schedule
-
-- Send system messages to players in-game (and automatically on restart)
+- Servers run in the background so you can close the PowerShell window
 
 - Search for and customize Game, Host, and Voip settings
 
 - Read and tail log files
 
+## Feature Roadmap
+
+These features will be added in future releases
+
+- (Coming Soon!) Automatically update server on start
+
+- (Coming Soon!) Send system messages to players in-game from the console
+
+- Automatically send system messages on restart or shutdown
+
+- Automatically restart servers on a schedule
+
 - Rotate and archive log files
 
 - Archive save files
 
-# Table of Contents
+# Documentation
 
 [Requirements](#requirements)
 
@@ -126,7 +136,7 @@ Other platforms may also work that meet the minimum requirements, but have not b
 ## Install from PowerShellGallery
 
 ```
-Install-Module VRisingServerManager
+Install-Module -Name VRisingServerManager
 ```
 
 OR
