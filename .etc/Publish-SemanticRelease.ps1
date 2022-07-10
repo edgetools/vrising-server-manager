@@ -276,11 +276,18 @@ function GetRefForVersion($version) {
     return $null
 }
 
-function GitTagVersion($version) {
+function GitTagVersion(
+        [string]$authorName,
+        [string]$authorEmail,
+        [string]$message,
+        [string]$version) {
     if ([string]::IsNullOrWhiteSpace($version)) {
         throw "version cannot be null"
     }
-    git tag $version
+    $message | git `
+        -c "user.name=$authorName" `
+        -c "user.email=$authorEmail" `
+        tag -a --file - --cleanup=whitespace $version
     if ($LASTEXITCODE -ne 0) {
         throw "git command failed"
     }
@@ -942,7 +949,11 @@ function DoMain(
     if ($dryRun -eq $true) {
         Write-Warning "-- DRY RUN -- Would tag release $(GetStringVersion $nextVersion)"
     } else {
-        GitTagVersion $(GetStringVersion $nextVersion)
+        GitTagVersion `
+            $rcFile.AuthorName `
+            $rcFile.AuthorEmail `
+            $renderedChangelog `
+            $(GetStringVersion $nextVersion)
         Write-Host "Tagged release $(GetStringVersion $nextVersion)"
     }
     if ($true -eq $publish) {
