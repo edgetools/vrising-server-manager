@@ -6,8 +6,8 @@
 # inspired by the semantic-release and conventional-commits projects
 # https://www.conventionalcommits.org/en/v1.0.0/#summary
 
+[CmdletBinding(DefaultParameterSetName='Publish')]
 param(
-    [CmdletBinding(DefaultParameterSetName='Publish')]
     [Parameter(ParameterSetName='Publish')]
     [switch]$Publish,
     [Parameter(ParameterSetName='Publish')]
