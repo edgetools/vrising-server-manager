@@ -898,10 +898,10 @@ function DoMain(
         $(GetStringVersion $nextVersion) `
         $(GetStringVersion $previousVersion) `
         $changelog
-    Write-Host "--- CHANGELOG ---"
+    Write-Host "----------------- CHANGELOG -----------------"
     $renderedChangelogHeader
     $renderedChangelog
-    Write-Host "-----------------"
+    Write-Host "---------------------------------------------"
     # update changelog
     $changelogFileContent = ReadChangelogFile $rcFile.ChangelogFilePath
     $updatedChangelogFileContent = UpdateChangelog $changelogFileContent $renderedChangelogHeader $renderedChangelog
@@ -947,7 +947,10 @@ function DoMain(
     Write-Host "Tagged release $(GetStringVersion $nextVersion)"
     if ($true -eq $publish) {
         # ensure module is valid
+        Write-Host "---------------- MODULE TEST ----------------"
         Test-ModuleManifest -Path $rcFile.ModuleManifestFilePath
+        Write-Host "---------------------------------------------"
+        Write-Host "----------------- PUSH REPO -----------------"
         if ($dryRun -eq $true) {
             Write-Warning "-- DRY RUN -- would push release to origin"
         } else {
@@ -955,7 +958,9 @@ function DoMain(
                 $rcFile.PushBranch `
                 $(GetStringVersion $nextVersion)
         }
+        Write-Host "---------------------------------------------"
         Write-Host "Pushed release $(GetStringVersion $nextVersion) to origin"
+        Write-Host "---------------- PUSH MODULE ----------------"
         if ($dryRun -eq $true) {
             Write-Warning "-- DRY RUN -- would publish module to PowerShellGallery"
         } else {
@@ -965,6 +970,7 @@ function DoMain(
                 -NuGetApiKey $apiKey `
                 -Force
         }
+        Write-Host "---------------------------------------------"
         Write-Host "Published release $(GetStringVersion $nextVersion) to PowerShellGallery"
     }
 }

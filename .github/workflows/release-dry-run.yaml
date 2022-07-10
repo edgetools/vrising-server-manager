@@ -38,4 +38,4 @@ jobs:
         run: Invoke-psake -taskList clean,build; exit (!$psake.build_success)
 
       - name: release dry run
-        run: .\.etc\Publish-SemanticRelease.ps1
+        run: .\.etc\Publish-SemanticRelease.ps1 -WhatIf
