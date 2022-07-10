@@ -906,10 +906,10 @@ function DoMain(
     $changelogFileContent = ReadChangelogFile $rcFile.ChangelogFilePath
     $updatedChangelogFileContent = UpdateChangelog $changelogFileContent $renderedChangelogHeader $renderedChangelog
     if ($dryRun -eq $true) {
-        Write-Warning "-- DRY RUN -- Would write changelog to $($rcFile.ChangelogFilePath)"
+        Write-Warning "-- DRY RUN -- Would write changelog"
     } else {
         WriteChangelogFile $rcFile.ChangelogFilePath $updatedChangelogFileContent
-        Write-Host "Wrote changelog to $($rcFile.ChangelogFilePath)"
+        Write-Host "Wrote changelog"
     }
     # update manifest
     if ($dryRun -eq $true) {
