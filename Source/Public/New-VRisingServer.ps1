@@ -1,9 +1,11 @@
 function New-VRisingServer {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory=$true)]
         [string] $ShortName
     )
 
-    [VRisingServer]::CreateServer($ShortName)
+    if ($true -eq $PSCmdlet.ShouldProcess($ShortName)) {
+        [VRisingServer]::CreateServer($ShortName)
+    }
 }

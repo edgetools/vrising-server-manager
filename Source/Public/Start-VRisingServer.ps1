@@ -1,5 +1,5 @@
 function Start-VRisingServer {
-    [CmdletBinding(DefaultParameterSetName='ByShortName')]
+    [CmdletBinding(DefaultParameterSetName='ByShortName', SupportsShouldProcess)]
     param (
         [Parameter(Position=0, ParameterSetName='ByShortName')]
         [string[]] $ShortName,
@@ -16,7 +16,9 @@ function Start-VRisingServer {
         }
         foreach ($serverItem in $servers) {
             try {
-                $serverItem.Start()
+                if ($PSCmdlet.ShouldProcess($serverItem.ShortName)) {
+                    $serverItem.Start()
+                }
             } catch [VRisingServerException] {
                 Write-Error $_.Exception
                 continue

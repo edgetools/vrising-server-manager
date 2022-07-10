@@ -1,5 +1,5 @@
 function Set-VRisingServer {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Position=0, ParameterSetName='ByShortName')]
         [string[]] $ShortName,
@@ -27,15 +27,17 @@ function Set-VRisingServer {
     }
 
     foreach ($server in $servers) {
-        switch ($SettingsType) {
-            ([VRisingServerSettingsType]::Host) {
-                $server._settings.SetHostSetting($SettingName, $SettingValue, $Default)
-            }
-            ([VRisingServerSettingsType]::Game) {
-                $server._settings.SetGameSetting($SettingName, $SettingValue, $Default)
-            }
-            ([VRisingServerSettingsType]::Voip) {
-                $server._settings.SetVoipSetting($SettingName, $SettingValue, $Default)
+        if ($PSCmdlet.ShouldProcess($server.ShortName)) {
+            switch ($SettingsType) {
+                ([VRisingServerSettingsType]::Host) {
+                    $server._settings.SetHostSetting($SettingName, $SettingValue, $Default)
+                }
+                ([VRisingServerSettingsType]::Game) {
+                    $server._settings.SetGameSetting($SettingName, $SettingValue, $Default)
+                }
+                ([VRisingServerSettingsType]::Voip) {
+                    $server._settings.SetVoipSetting($SettingName, $SettingValue, $Default)
+                }
             }
         }
     }

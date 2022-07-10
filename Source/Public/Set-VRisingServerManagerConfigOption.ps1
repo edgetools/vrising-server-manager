@@ -1,5 +1,5 @@
 function Set-VRisingServerManagerConfigOption {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory=$true, Position=0)]
         $Option,
@@ -7,7 +7,9 @@ function Set-VRisingServerManagerConfigOption {
         [Parameter(Position=1)]
         [psobject]$Value
     )
-    [VRisingServer]::SetConfigValue($Option, $Value)
+    if ($PSCmdlet.ShouldProcess($Option)) {
+        [VRisingServer]::SetConfigValue($Option, $Value)
+    }
 }
 
 Register-ArgumentCompleter -CommandName Set-VRisingServerManagerConfigOption -ParameterName Option -ScriptBlock $function:ServerManagerOptionArgumentCompleter

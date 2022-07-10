@@ -1,5 +1,5 @@
 function Update-VRisingServer {
-    [CmdletBinding(DefaultParameterSetName='ByShortName')]
+    [CmdletBinding(DefaultParameterSetName='ByShortName', SupportsShouldProcess)]
     param (
         [Parameter(Position=0, ParameterSetName='ByShortName')]
         [string[]] $ShortName,
@@ -16,7 +16,9 @@ function Update-VRisingServer {
         }
         foreach ($serverItem in $servers) {
             try {
-                $serverItem.Update()
+                if ($PSCmdlet.ShouldProcess($serverItem.ShortName)) {
+                    $serverItem.Update()
+                }
             } catch [VRisingServerException] {
                 Write-Error $_.Exception
                 continue

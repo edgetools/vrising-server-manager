@@ -12,9 +12,7 @@ properties {
     $packageFilesDirPath = "$PSScriptRoot\Package"
 
     $licenseFilePath = "$PSScriptRoot\LICENSE.txt"
-
-    $moduleVersion = $null
-    $releaseNotes =  $null
+    $readmeFilePath = "$PSScriptRoot\README.md"
 }
 
 Task default -Depends Clean, Build
@@ -30,6 +28,7 @@ Task Build -Depends `
     CombineSourceFragments, `
     CopyPackageFiles, `
     CopyLicenseFile, `
+    CopyReadmeFile, `
     RunScriptAnalyzer
 
 Task EnsureModuleDirExists {
@@ -63,22 +62,8 @@ Task CopyLicenseFile {
     Copy-Item -Path $licenseFilePath -Destination $moduleDirPath
 }
 
-Task SetModuleVersion {
-    if ($true -eq [string]::IsNullOrWhiteSpace($moduleVersion)) {
-        throw [System.ArgumentNullException]::New('moduleVersion')
-    }
-    Update-ModuleManifest `
-        -Path $moduleManifestFilePath `
-        -ModuleVersion $moduleVersion
-}
-
-Task SetReleaseNotes {
-    if ($true -eq [string]::IsNullOrWhiteSpace($releaseNotes)) {
-        throw [System.ArgumentNullException]::New('releaseNotes')
-    }
-    Update-ModuleManifest `
-        -Path $moduleManifestFilePath `
-        -ReleaseNotes $releaseNotes
+Task CopyReadmeFile {
+    Copy-Item -Path $readmeFilePath -Destination $moduleDirPath
 }
 
 Task RunScriptAnalyzer {

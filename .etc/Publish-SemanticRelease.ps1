@@ -7,10 +7,11 @@
 # https://www.conventionalcommits.org/en/v1.0.0/#summary
 
 param(
-    [switch]$BumpVersion,
-    [switch]$UpdateChangelog,
-    [switch]$UpdateReleaseNotes,
+    [Parameter(ParameterSetName='Publish')]
     [switch]$Publish,
+    [Parameter(ParameterSetName='Publish')]
+    [string]$ApiKey,
+    [Parameter(ParameterSetName='LibraryMode')]
     [switch]$LibraryMode
 )
 
@@ -293,8 +294,14 @@ function GitAddFiles([string[]]$files) {
     }
 }
 
-function CreateReleaseCommit([string]$version) {
-    git commit -m "chore: [skip ci] release $version"
+function CreateReleaseCommit(
+        [string]$committerName,
+        [string]$committerEmail,
+        [string]$version) {
+    git `
+        -c "committer.name=$committerName" `
+        -c "committer.email=$committerEmail" `
+        commit -m "chore: [skip ci] release $version"
     if ($LASTEXITCODE -ne 0) {
         throw "git command failed"
     }
@@ -811,6 +818,11 @@ function PickVersionToUse($tagVersion, $fileVersion) {
     }
 }
 
+function ReadModuleManifest($path) {
+    $dataFile = Import-PowerShellDataFile -LiteralPath $path
+    return $dataFile
+}
+
 function UpdateModuleManifest($path, $newVersion, $releaseNotes) {
     Update-ModuleManifest `
         -Path $path `
@@ -818,70 +830,12 @@ function UpdateModuleManifest($path, $newVersion, $releaseNotes) {
         -ReleaseNotes $releaseNotes
 }
 
-function DoTestCommits() {
-    $rcFile = LoadRunCommandsFile
-    $commitsWithParsedBodies = ParseCommitBodies $testCommits $rcFile.PrunePatterns
-    $conventionalCommits = GetConventionalCommits `
-        $rcFile.ChangelogCategories `
-        $rcFile.CommitTypes `
-        $commitsWithParsedBodies
-    $changelog = GenerateChangelogFromCommits `
-        $rcFile.ChangelogCategories `
-        $conventionalCommits
-    $previousVersion = GetSemanticVersion '0.0.1'
-    $versionChange = 'Major'
-    $nextVersion = BumpSemanticVersion $previousVersion $versionChange $rcFile.AllowBumpZeroMajor
-    RenderChangelogHeader $rcFile.ChangelogHeader
-    RenderChangelog `
-        $rcFile.RepoUri `
-        $(GetStringVersion $nextVersion) `
-        $(GetStringVersion $previousVersion) `
-        $changelog
-}
-
-$testCommits = @(
-    @{
-        Body = @"
-fix(foo-bar): prevent racing of requests
-
-Introduce a request id and a reference to latest request. Dismiss
-incoming responses other than from latest request.
-
-Remove timeouts which were used to mitigate the racing issue but are
-obsolete now.
-
-Reviewed-by: Foo <foo@foo.foo>
-Closes #123
-BREAKING-CHANGE: added a new thing
-
-here's details about it:
-- it's cool
-"@
-        ShortHash = '562f3b4'
-        FullHash = '562f3b45456065b9a3d01050ad79343b0224c2ee'
-    },
-
-    @{
-        Body = @"
-feat(baz)!: new stuff that does stuff
-
-This is a description
-
-BREAKING CHANGE: this is one of the breaking changes
-BREAKING-CHANGE: plus other stuff broke worse
-"@
-        ShortHash = 'A23B544'
-        FullHash = 'A23B5445456065b9a3d01050ad79343b0224c2ee'
-    },
-
-    @{
-        Body = @"
-docs: updated the docs
-"@
-        ShortHash = 'c743c15'
-        FullHash = 'c743c154af70e8074e588f69d875bd065f205e96'
+function PushGitRepo([string]$branch, [string]$version) {
+    git push origin "refs/heads/$branch" "refs/tags/$version"
+    if ($LASTEXITCODE -ne 0) {
+        throw "git command failed"
     }
-)
+}
 
 function LoadRunCommandsFile() {
     $cwdRCFilePath = Join-Path -Path (Get-Location) -ChildPath '.releaserc.ps1'
@@ -890,7 +844,9 @@ function LoadRunCommandsFile() {
     }
 }
 
-function DoMain() {
+function DoMain(
+        [bool]$publish,
+        [string]$apiKey) {
     $rcFile = LoadRunCommandsFile
     $previousVersion = GetLatestSemanticGitTag
     if ($false -eq [string]::IsNullOrWhiteSpace($previousVersion)) {
@@ -959,13 +915,30 @@ function DoMain() {
     GitAddFiles $rcFile.ChangelogFilePath
     Write-Host "Added updated changelog to commit"
     # create release commit
-    CreateReleaseCommit $(GetStringVersion $nextVersion)
+    CreateReleaseCommit `
+        $rcFile.CommitterName `
+        $rcFile.CommitterEmail `
+        $(GetStringVersion $nextVersion)
     Write-Host "Created release commit"
     # tag the release
     GitTagVersion $(GetStringVersion $nextVersion)
     Write-Host "Tagged release $(GetStringVersion $nextVersion)"
+    if ($true -eq $publish) {
+        # ensure module is valid
+        Test-ModuleManifest -Path $rcFile.ModuleManifestFilePath
+        PushGitRepo `
+            $rcFile.PushBranch `
+            $(GetStringVersion $nextVersion)
+        Write-Host "Pushed release $(GetStringVersion $nextVersion) to origin"
+        Publish-Module `
+            -Repository 'PSGallery' `
+            -Path $rcFile.ModuleDirPath `
+            -NuGetApiKey $apiKey `
+            -Force
+        Write-Host "Published release $(GetStringVersion $nextVersion) to PowerShellGallery"
+    }
 }
 
 if ($false -eq $LibraryMode) {
-    DoMain
+    DoMain $Publish $ApiKey
 }

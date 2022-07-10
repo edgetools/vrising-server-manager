@@ -41,16 +41,16 @@ class VRisingServerProcessMonitor {
                             break
                         }
                         'Update' {
-                            $this.LaunchUpdate()
-                            while ($true -eq $this.UpdateIsRunning()) {
-                                # asdf
-                            }
-                            $updateProcess = $this.GetUpdateProcess()
-                            if ($null -ne $updateProcess) {
-                                $updateExitCode = $updateProcess.ExitCode
-                            }
-                            # TODO wait for update to exit and capture exit code
-                            break
+                            # $this.LaunchUpdate()
+                            # while ($true -eq $this.UpdateIsRunning()) {
+                            #     # asdf
+                            # }
+                            # $updateProcess = $this.GetUpdateProcess()
+                            # if ($null -ne $updateProcess) {
+                            #     $updateExitCode = $updateProcess.ExitCode
+                            # }
+                            # # TODO wait for update to exit and capture exit code
+                            # break
                         }
                     }
                     $this._properties.WriteProperty('ProcessMonitorActiveCommand', $null)
