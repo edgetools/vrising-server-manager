@@ -906,45 +906,45 @@ function DoMain(
     $changelogFileContent = ReadChangelogFile $rcFile.ChangelogFilePath
     $updatedChangelogFileContent = UpdateChangelog $changelogFileContent $renderedChangelogHeader $renderedChangelog
     if ($dryRun -eq $true) {
-        Write-Warning "-- DRY RUN -- would write updated changelog to disk"
+        Write-Warning "-- DRY RUN -- Would write changelog to $($rcFile.ChangelogFilePath)"
     } else {
         WriteChangelogFile $rcFile.ChangelogFilePath $updatedChangelogFileContent
+        Write-Host "Wrote changelog to $($rcFile.ChangelogFilePath)"
     }
-    Write-Host "Wrote changelog to $($rcFile.ChangelogFilePath)"
     # update manifest
     if ($dryRun -eq $true) {
-        Write-Warning "-- DRY RUN -- would update module manifest"
+        Write-Warning "-- DRY RUN -- Would update module version to $(GetStringVersion $nextVersion)"
     } else {
         UpdateModuleManifest `
             $rcFile.ModuleManifestFilePath `
             $(GetStringVersion $nextVersion) `
             $renderedChangelog
+        Write-Host "Updated module version to $(GetStringVersion $nextVersion)"
     }
-    Write-Host "Updated module version to $(GetStringVersion $nextVersion)"
     # add updated files to release commit
     if ($dryRun -eq $true) {
-        Write-Warning "-- DRY RUN -- would add updated changelog to commit"
+        Write-Warning "-- DRY RUN -- Would add updated changelog to commit"
     } else {
         GitAddFiles $rcFile.ChangelogFilePath
+        Write-Host "Added updated changelog to commit"
     }
-    Write-Host "Added updated changelog to commit"
     # create release commit
     if ($dryRun -eq $true) {
-        Write-Warning "-- DRY RUN -- would create release commit"
+        Write-Warning "-- DRY RUN -- Would create release commit"
     } else {
         CreateReleaseCommit `
             $rcFile.CommitterName `
             $rcFile.CommitterEmail `
             $(GetStringVersion $nextVersion)
+        Write-Host "Created release commit"
     }
-    Write-Host "Created release commit"
     # tag the release
     if ($dryRun -eq $true) {
-        Write-Warning "-- DRY RUN -- would tag release"
+        Write-Warning "-- DRY RUN -- Would tag release $(GetStringVersion $nextVersion)"
     } else {
         GitTagVersion $(GetStringVersion $nextVersion)
+        Write-Host "Tagged release $(GetStringVersion $nextVersion)"
     }
-    Write-Host "Tagged release $(GetStringVersion $nextVersion)"
     if ($true -eq $publish) {
         # ensure module is valid
         Write-Host "---------------- MODULE TEST ----------------"
@@ -952,26 +952,26 @@ function DoMain(
         Write-Host "---------------------------------------------"
         Write-Host "----------------- PUSH REPO -----------------"
         if ($dryRun -eq $true) {
-            Write-Warning "-- DRY RUN -- would push release to origin"
+            Write-Warning "-- DRY RUN -- Would push branch '$($rcFile.PushBranch)' and tag '$(GetStringVersion $nextVersion)' to origin"
         } else {
             PushGitRepo `
                 $rcFile.PushBranch `
                 $(GetStringVersion $nextVersion)
+            Write-Host "Pushed branch '$($rcFile.PushBranch)' and tag '$(GetStringVersion $nextVersion)' to origin"
         }
         Write-Host "---------------------------------------------"
-        Write-Host "Pushed release $(GetStringVersion $nextVersion) to origin"
-        Write-Host "---------------- PUSH MODULE ----------------"
+        Write-Host "--------------- PUBLISH MODULE --------------"
         if ($dryRun -eq $true) {
-            Write-Warning "-- DRY RUN -- would publish module to PowerShellGallery"
+            Write-Warning "-- DRY RUN -- Would publish module $(GetStringVersion $nextVersion) to PowerShellGallery"
         } else {
             Publish-Module `
                 -Repository 'PSGallery' `
                 -Path $rcFile.ModuleDirPath `
                 -NuGetApiKey $apiKey `
                 -Force
+            Write-Host "Published module $(GetStringVersion $nextVersion) to PowerShellGallery"
         }
         Write-Host "---------------------------------------------"
-        Write-Host "Published release $(GetStringVersion $nextVersion) to PowerShellGallery"
     }
 }
 
