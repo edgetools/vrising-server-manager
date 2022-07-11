@@ -1006,7 +1006,7 @@ function DoMain(
         GitTagVersion `
             $rcFile.AuthorName `
             $rcFile.AuthorEmail `
-            $renderedChangelog `
+            $releaseNotes `
             $(GetStringVersion $nextVersion)
         Write-Host "Tagged release $(GetStringVersion $nextVersion)"
     }
