@@ -34,6 +34,11 @@ These features will be added in future releases
 
 - Archive save files
 
+# Release Notes
+
+<!-- begin release notes -->
+<!-- end release notes -->
+
 # Table of Contents
 
 [Requirements](#requirements)

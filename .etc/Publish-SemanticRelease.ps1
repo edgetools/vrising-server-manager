@@ -13,7 +13,9 @@ param(
     [Parameter(ParameterSetName='Publish')]
     [string]$ApiKey,
     [Parameter(ParameterSetName='LibraryMode')]
-    [switch]$LibraryMode
+    [switch]$LibraryMode,
+
+    [string]$StartRef
 )
 
 $ErrorActionPreference = 'Stop'
@@ -753,15 +755,15 @@ function GenerateChangelogFromCommits($changelogCategories, [hashtable[]]$conven
     return $changelog
 }
 
-function ReadChangelogFile($changelogFilePath) {
-    if ($false -eq (Test-Path -LiteralPath $changelogFilePath)) {
+function ReadFile($path) {
+    if ($false -eq (Test-Path -LiteralPath $path)) {
         return $null
     }
-    (Get-Content -LiteralPath $changelogFilePath -Raw).TrimEnd()
+    (Get-Content -LiteralPath $path -Raw).TrimEnd()
 }
 
-function WriteChangelogFile($changelogFilePath, $changelogFileContent) {
-    Out-File -FilePath $changelogFilePath -InputObject $changelogFileContent
+function WriteFile($path, $content) {
+    Out-File -FilePath $path -InputObject $content
 }
 
 function UpdateChangelog($oldChangelog, $newHeader, $newChangelog) {
@@ -818,6 +820,12 @@ function UpdateChangelog($oldChangelog, $newHeader, $newChangelog) {
     return $updatedChangelog -join ''
 }
 
+function UpdateReadme($oldReadme, $changelog) {
+    $findPattern = '<!-- begin release notes -->[\s\S]*<!-- end release notes -->'
+    $replaceString = "<!-- begin release notes -->$([System.Environment]::NewLine)$changelog$([System.Environment]::NewLine)<!-- end release notes -->"
+    $oldReadme -replace $findPattern,$replaceString
+}
+
 function PickVersionToUse($tagVersion, $fileVersion) {
     if ($null -ne $tagVersion) {
         return $tagVersion
@@ -845,6 +853,34 @@ function PushGitRepo([string]$branch, [string]$version) {
     }
 }
 
+function SanitizeMarkdown([string]$markdown) {
+    # immediately assign so it's easier to move around the commands after
+    # without worrying about putting $markdown in the wrong spot
+    $sanitizedMarkdown = $markdown
+
+    # remove all links
+    $sanitizedMarkdown = $sanitizedMarkdown -replace '\[([^\n\r]+)\]\([^\n\r()]*\)','$1'
+
+    # replace asterisk style indent with dashes
+    $sanitizedMarkdown = $sanitizedMarkdown -replace '(^ *|[\n\r] *)\* ','$1- '
+
+    # remove header marks
+    $sanitizedMarkdown = $sanitizedMarkdown -replace '(^|[\n\r])#+ ','$1'
+
+    # remove double asterisk bolding
+    $sanitizedMarkdown = $sanitizedMarkdown -replace '\*\*(.+)\*\*+','$1'
+    # remove single asterisk italics
+    $sanitizedMarkdown = $sanitizedMarkdown -replace '\*(.+)\*+','$1'
+
+    # remove double underline italics
+    $sanitizedMarkdown = $sanitizedMarkdown -replace '__(.+)__+','$1'
+    # remove single underline italics
+    $sanitizedMarkdown = $sanitizedMarkdown -replace '_(.+)_+','$1'
+
+    # output
+    $sanitizedMarkdown
+}
+
 function LoadRunCommandsFile() {
     $cwdRCFilePath = Join-Path -Path (Get-Location) -ChildPath '.releaserc.ps1'
     if ($true -eq (Test-Path -LiteralPath $cwdRCFilePath -PathType Leaf)) {
@@ -855,7 +891,8 @@ function LoadRunCommandsFile() {
 function DoMain(
         [bool]$dryRun,
         [bool]$publish,
-        [string]$apiKey) {
+        [string]$apiKey,
+        [string]$startRef) {
     $rcFile = LoadRunCommandsFile
     $previousVersion = GetLatestSemanticGitTag
     if ($false -eq [string]::IsNullOrWhiteSpace($previousVersion)) {
@@ -863,7 +900,11 @@ function DoMain(
     } else {
         Write-Host "No previous version found"
     }
-    $lastReleaseRef = GetRefForVersion $(GetStringVersion $previousVersion)
+    if ($true -eq [string]::IsNullOrWhiteSpace($startRef)) {
+        $lastReleaseRef = GetRefForVersion $(GetStringVersion $previousVersion)
+    } else {
+        $lastReleaseRef = $startRef
+    }
     $commitLog = GetCommitLogUsingGit $lastReleaseRef
     $commitsFromLog = ParseGitCommitLog $commitLog
     if ($false -eq [string]::IsNullOrWhiteSpace($lastReleaseRef)) {
@@ -905,18 +946,31 @@ function DoMain(
         $(GetStringVersion $nextVersion) `
         $(GetStringVersion $previousVersion) `
         $changelog
+    $releaseNotes = SanitizeMarkdown $renderedChangelog
     Write-Host "----------------- CHANGELOG -----------------"
     $renderedChangelogHeader
     $renderedChangelog
     Write-Host "---------------------------------------------"
+    Write-Host "--------------- RELEASE NOTES ---------------"
+    $releaseNotes
+    Write-Host "---------------------------------------------"
     # update changelog
-    $changelogFileContent = ReadChangelogFile $rcFile.ChangelogFilePath
+    $changelogFileContent = ReadFile $rcFile.ChangelogFilePath
     $updatedChangelogFileContent = UpdateChangelog $changelogFileContent $renderedChangelogHeader $renderedChangelog
     if ($dryRun -eq $true) {
         Write-Warning "-- DRY RUN -- Would write changelog"
     } else {
-        WriteChangelogFile $rcFile.ChangelogFilePath $updatedChangelogFileContent
+        WriteFile $rcFile.ChangelogFilePath $updatedChangelogFileContent
         Write-Host "Wrote changelog"
+    }
+    # update readme
+    $readmeFileContent = ReadFile $rcFile.ReadmeFilePath
+    $updatedReadmeFileContent = UpdateReadme $readmeFileContent $renderedChangelog
+    if ($dryRun -eq $true) {
+        Write-Warning "-- DRY RUN -- Would write readme"
+    } else {
+        WriteFile $rcFile.ReadmeFilePath $updatedReadmeFileContent
+        Write-Host "Wrote readme"
     }
     # update manifest
     if ($dryRun -eq $true) {
@@ -925,15 +979,15 @@ function DoMain(
         UpdateModuleManifest `
             $rcFile.ModuleManifestFilePath `
             $(GetStringVersion $nextVersion) `
-            $renderedChangelog
+            $releaseNotes
         Write-Host "Updated module version to $(GetStringVersion $nextVersion)"
     }
     # add updated files to release commit
     if ($dryRun -eq $true) {
-        Write-Warning "-- DRY RUN -- Would add updated changelog to commit"
+        Write-Warning "-- DRY RUN -- Would add updated changelog and readme to commit"
     } else {
-        GitAddFiles $rcFile.ChangelogFilePath
-        Write-Host "Added updated changelog to commit"
+        GitAddFiles $rcFile.ChangelogFilePath,$rcFile.ReadmeFilePath
+        Write-Host "Added updated changelog and readme to commit"
     }
     # create release commit
     if ($dryRun -eq $true) {
@@ -987,5 +1041,5 @@ function DoMain(
 }
 
 if ($false -eq $LibraryMode) {
-    DoMain $WhatIfPreference $Publish $ApiKey
+    DoMain $WhatIfPreference $Publish $ApiKey $StartRef
 }

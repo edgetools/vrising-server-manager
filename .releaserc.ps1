@@ -8,6 +8,7 @@
     ModuleManifestFilePath = (
             Join-Path -Path $PSScriptRoot -ChildPath 'VRisingServerManager' |
             Join-Path -ChildPath 'VRisingServerManager.psd1')
+    ReadmeFilePath = Join-Path -Path $PSScriptRoot -ChildPath 'README.md'
     ChangelogFilePath = Join-Path -Path $PSScriptRoot -ChildPath 'CHANGELOG.md'
     ChangelogHeader = 'Changelog'
     ChangelogCategories = [ordered]@{

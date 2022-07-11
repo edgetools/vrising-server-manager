@@ -12,7 +12,6 @@ properties {
     $packageFilesDirPath = "$PSScriptRoot\Package"
 
     $licenseFilePath = "$PSScriptRoot\LICENSE.txt"
-    $readmeFilePath = "$PSScriptRoot\README.md"
 }
 
 Task default -Depends Clean, Build
@@ -28,7 +27,6 @@ Task Build -Depends `
     CombineSourceFragments, `
     CopyPackageFiles, `
     CopyLicenseFile, `
-    CopyReadmeFile, `
     RunScriptAnalyzer
 
 Task EnsureModuleDirExists {
@@ -60,10 +58,6 @@ Task CopyPackageFiles {
 
 Task CopyLicenseFile {
     Copy-Item -Path $licenseFilePath -Destination $moduleDirPath
-}
-
-Task CopyReadmeFile {
-    Copy-Item -Path $readmeFilePath -Destination $moduleDirPath
 }
 
 Task RunScriptAnalyzer {
