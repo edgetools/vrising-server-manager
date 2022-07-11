@@ -28,9 +28,9 @@ if ('SkipNewVersionCheck' -notin $VRisingServerManagerFlags) {
         Write-Warning "To update, run:"
         Write-Warning "  Update-Module -Name VRisingServerManager"
         Write-Warning ''
-        Write-Warning "To disable this check:"
+        Write-Warning "To disable this check, set:"
         Write-Warning "  `$VRisingServerManagerFlags += ('SkipNewVersionCheck')"
         Write-Warning ''
-        Write-Warning "-- Release Notes --$([System.Environment]::NewLine)$($releaseNotesWarning)"
+        Write-Warning "-- Release Notes --$([System.Environment]::NewLine)WARNING: $([System.Environment]::NewLine)$($releaseNotesWarning)"
     }
 }
