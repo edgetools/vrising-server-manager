@@ -126,6 +126,7 @@ class VRisingServer {
             Join-Path -ChildPath 'VRisingServerManager' |
             Join-Path -ChildPath 'Servers'
         [VRisingServer]::_config = @{
+            SkipNewVersionCheck = $false
             DefaultServerDir = 'D:\VRisingServers'
             SteamCmdPath = $null
         }
@@ -135,7 +136,7 @@ class VRisingServer {
         }
     }
 
-    static hidden [string[]] GetConfigValue([string]$configKey) {
+    static hidden [psobject[]] GetConfigValue([string]$configKey) {
         return [VRisingServer]::_config[$configKey]
     }
 
@@ -145,6 +146,7 @@ class VRisingServer {
         }
         [VRisingServer]::_config[$configKey] = $configValue
         [VRisingServer]::SaveConfigFile()
+        [VRisingServerLog]::Info("Updated $configKey")
     }
 
     static hidden [string[]] GetConfigKeys() {
@@ -156,6 +158,9 @@ class VRisingServer {
             return
         }
         $configFileContents = Get-Content -Raw -LiteralPath ([VRisingServer]::_configFilePath) | ConvertFrom-Json
+        if ($true -eq ($configFileContents.PSObject.Properties.Name -contains 'SkipNewVersionCheck')) {
+            [VRisingServer]::_config['SkipNewVersionCheck'] = $configFileContents.SkipNewVersionCheck
+        }
         if ($true -eq ($configFileContents.PSObject.Properties.Name -contains 'DefaultServerDir')) {
             [VRisingServer]::_config['DefaultServerDir'] = $configFileContents.DefaultServerDir
         }
@@ -173,6 +178,7 @@ class VRisingServer {
             New-Item -Path $configFileDir -ItemType Directory | Out-Null
         }
         $configFile = [PSCustomObject]@{
+            SkipNewVersionCheck = [VRisingServer]::_config['SkipNewVersionCheck']
             DefaultServerDir = [VRisingServer]::_config['DefaultServerDir']
             SteamCmdPath = [VRisingServer]::_config['SteamCmdPath']
         }

@@ -12,25 +12,30 @@ $Global:PSDefaultParameterValues['Restart-VRisingServer:ErrorAction'] = 'Continu
 Update-FormatData -AppendPath "$PSScriptRoot\VRisingServerManager.Format.ps1xml"
 
 # check for new version
-if ('SkipNewVersionCheck' -notin $VRisingServerManagerFlags) {
+$skipNewVersionCheck = [VRisingServer]::GetConfigValue('SkipNewVersionCheck')
+if (($true -ne $VRisingServerManagerFlags.SkipNewVersionCheck) -and
+        ($true -ne $skipNewVersionCheck)) {
     $private:latestModule = Find-Module `
         -Name 'VRisingServerManager' `
         -Repository PSGallery `
         -MinimumVersion $ModuleVersion
     if ($ModuleVersion -ne $private:latestModule.Version) {
-        $releaseNotesWarning = ($private:latestModule.ReleaseNotes.Split(@("`r`n", "`r", "`n"), [System.StringSplitOptions]::None) |
-            ForEach-Object { "WARNING: $_" }) -join ([System.Environment]::NewLine)
-        Write-Warning "-- New Version Available! --"
+        $releaseNotesWarning = ($private:latestModule.ReleaseNotes.Split(@("`r`n", "`r", "`n"), [System.StringSplitOptions]::None) | ForEach-Object { "WARNING: $_" }) -join ([System.Environment]::NewLine)
+        Write-Warning '-- New Version Available! --'
         Write-Warning ''
         Write-Warning "Current Version: $ModuleVersion"
         Write-Warning "Latest Version: $($private:latestModule.Version)"
         Write-Warning ''
-        Write-Warning "To update, run:"
-        Write-Warning "  Update-Module -Name VRisingServerManager"
+        Write-Warning 'To update, run:'
+        Write-Warning '  Update-Module -Name VRisingServerManager'
         Write-Warning ''
-        Write-Warning "To disable this check, set:"
-        Write-Warning "  `$VRisingServerManagerFlags += ('SkipNewVersionCheck')"
+        Write-Warning 'To disable this check, run:'
+        Write-Warning '  vrmset SkipNewVersionCheck $true'
         Write-Warning ''
         Write-Warning "-- Release Notes --$([System.Environment]::NewLine)WARNING: $([System.Environment]::NewLine)$($releaseNotesWarning)"
+    } else {
+        Write-Host "You are using the latest version -- run: `'vrmset SkipNewVersionCheck `$false' to disable checking for new versions"
     }
+} else {
+    Write-Host "Skipped new version check -- run: `'vrmset SkipNewVersionCheck `$false' to enable checking for new versions"
 }
