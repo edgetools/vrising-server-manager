@@ -29,12 +29,12 @@ if (($true -ne $VRisingServerManagerFlags.SkipNewVersionCheck) -and
         Write-Warning 'To update, run:'
         Write-Warning '  Update-Module -Name VRisingServerManager'
         Write-Warning ''
-        Write-Warning 'To disable this check, run:'
+        Write-Warning 'To disable checking for new versions, run:'
         Write-Warning '  vrmset SkipNewVersionCheck $true'
         Write-Warning ''
         Write-Warning "-- Release Notes --$([System.Environment]::NewLine)WARNING: $([System.Environment]::NewLine)$($releaseNotesWarning)"
     } else {
-        Write-Host "You are using the latest version -- run: `'vrmset SkipNewVersionCheck `$false' to disable checking for new versions"
+        Write-Host "You are using the latest version -- run: `'vrmset SkipNewVersionCheck `$true' to disable checking for new versions"
     }
 } else {
     Write-Host "Skipped new version check -- run: `'vrmset SkipNewVersionCheck `$false' to enable checking for new versions"
