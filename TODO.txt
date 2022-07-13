@@ -1,13 +1,16 @@
 (in-progress) TODO^: overhaul DoCommands to use process monitors /  watchers
-      - rather than commands, launch a process monitor
-      - runs a loop, sleeps every second, then checks the command queue
-      - if the command queue goes empty and the server is stopped, stop the process monitor
-      - if the process monitor isn't started when a command is issued, start the process monitor
-      - if a command is in the queue (file), pulls it off the top, processes it, then writes the removal once it finishes
-      - kill commands for update/start will still directly target the underlying process
+      - x rather than commands, launch a process monitor
+      - x runs a loop, sleeps every second, then checks the command queue
+      - x if the command queue goes empty and the server is stopped, stop the process monitor
+      - x if the process monitor isn't started when a command is issued, start the process monitor
+      - x if a command is in the queue (file), pulls it off the top, processes it, then writes the removal once it finishes
+      - x kill commands for update/start will still directly target the underlying process
       - stop commands will issue a command in the commandqueue
       - can also stop additional commands in the queue by disabling the server
       TODO: wait for commands to finish (start to start, stop to exit, update to exit) and grab exit codes
+
+TOOD: move the config.json stuff into its own class
+- move SkipNewVersionCheck into a config setting
 
 TODO: add a Wait-VRisingServer (vrwait) command
       - checks if a command is running
@@ -37,3 +40,6 @@ TODO: check process name as a safety measure
 TODO: zip/prune extra log files on rotation
 
 TODO: install steamcmd / rcu for the user
+
+TODO: add scheduled task to automatically start servers on windows startup
+- since the process launches in the background, a scheduled task won't negatively affect its performance

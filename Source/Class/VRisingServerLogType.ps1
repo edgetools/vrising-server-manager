@@ -1,9 +1,9 @@
 enum VRisingServerLogType {
-    File
+    Server
     Output
     Error
     Update
     UpdateError
-    Command
-    CommandError
+    Monitor
+    MonitorError
 }

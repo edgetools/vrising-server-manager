@@ -16,9 +16,9 @@ class VRisingServerProperties {
         return $this._filePath
     }
 
-    hidden [string] GetLogFilePath([VRisingServerLogType]$logType) {
+    [string] GetLogFilePath([VRisingServerLogType]$logType) {
         switch ($logType) {
-            ([VRisingServerLogType]::File) {
+            ([VRisingServerLogType]::Server) {
                 return Join-Path -Path $this.ReadProperty('LogDir') -ChildPath 'VRisingServer.log'
             }
             ([VRisingServerLogType]::Output) {
@@ -33,11 +33,11 @@ class VRisingServerProperties {
             ([VRisingServerLogType]::UpdateError) {
                 return $this.ReadProperty('UpdateStderrLogFile')
             }
-            ([VRisingServerLogType]::Command) {
-                return $this.ReadProperty('CommandStdoutLogFile')
+            ([VRisingServerLogType]::Monitor) {
+                return $this.ReadProperty('ProcessMonitorStdoutLogFile')
             }
-            ([VRisingServerLogType]::CommandError) {
-                return $this.ReadProperty('CommandStderrLogFile')
+            ([VRisingServerLogType]::MonitorError) {
+                return $this.ReadProperty('ProcessMonitorStderrLogFile')
             }
         }
         return $null

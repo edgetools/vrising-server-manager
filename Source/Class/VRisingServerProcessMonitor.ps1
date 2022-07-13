@@ -1,4 +1,6 @@
 class VRisingServerProcessMonitor {
+    static hidden [int] $STEAM_APP_ID = 1829350
+
     hidden [VRisingServerProperties] $_properties
 
     hidden [System.Threading.Mutex] $_processMutex
@@ -28,8 +30,8 @@ class VRisingServerProcessMonitor {
                 $activeCommand = $this.PopCommandQueueItem()
                 if ($null -ne $activeCommand) {
                     $this._properties.WriteProperty('ProcessMonitorActiveCommand', $activeCommand)
-                    [VRisingServerLog]::Info("[$($properties.ShortName)] processing command: $($activeCommand.CommandName)")
-                    switch ($activeCommand.CommandName) {
+                    [VRisingServerLog]::Info("[$($properties.ShortName)] processing command: $($activeCommand.Name)")
+                    switch ($activeCommand.Name) {
                         'Start' {
                             $this.LaunchServer()
                             # TODO wait for server to start and stabilize for... 30 seconds?
@@ -46,7 +48,7 @@ class VRisingServerProcessMonitor {
                         }
                     }
                     $this._properties.WriteProperty('ProcessMonitorActiveCommand', $null)
-                    [VRisingServerLog]::Info("[$($properties.ShortName)] command processed: $($activeCommand.CommandName)")
+                    [VRisingServerLog]::Info("[$($properties.ShortName)] command processed: $($activeCommand.Name)")
                 }
                 if ($this.GetQueueDepth() -eq 0) {
                     # TODO ? - don't exit the monitor unless nothing is running
@@ -69,7 +71,7 @@ class VRisingServerProcessMonitor {
         }
         $this.AddCommandQueueItem(
             [pscustomobject]@{
-                CommandName = 'Start'
+                Name = 'Start'
             }
         )
         $this.LaunchMonitor()
@@ -82,7 +84,7 @@ class VRisingServerProcessMonitor {
         }
         $this.AddCommandQueueItem(
             [pscustomobject]@{
-                CommandName = 'Stop'
+                Name = 'Stop'
                 Force = $force
             }
         )
@@ -96,11 +98,15 @@ class VRisingServerProcessMonitor {
         }
         $this.AddCommandQueueItem(
             [pscustomobject]@{
-                CommandName = 'Update'
+                Name = 'Update'
             }
         )
         $this.LaunchMonitor()
         [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] sent Update command")
+    }
+
+    [bool] IsEnabled() {
+        return $this._properties.ReadProperty('ProcessMonitorEnabled') -eq $true
     }
 
     [void] Enable() {
@@ -150,12 +156,86 @@ class VRisingServerProcessMonitor {
         & taskkill.exe '/PID' $this._properties.ReadProperty('ServerProcessId') $(if ($true -eq $force) { '/F' })
     }
 
-    [string] GetActiveCommandName() {
-        $activeCommand = $this._properties.ReadProperty('ProcessMonitorActiveCommand')
-        if ($null -ne $activeCommand) {
-            return $activeCommand.CommandName
+    [string] GetNextCommandName() {
+        if ($false -eq [string]::IsNullOrEmpty($this.GetActiveCommand().Name)) {
+            return $this.GetActiveCommand().Name
+        } elseif ($this.GetQueueDepth() -gt 0) {
+            return $this._properties.ReadProperty('ProcessMonitorCommandQueue')[0].Name
         } else {
             return $null
+        }
+    }
+
+    [int] GetQueueDepth() {
+        return $this._properties.ReadProperty('ProcessMonitorCommandQueue').Count
+    }
+
+    [bool] QueueIsBusy() {
+        if (($null -ne $this.GetActiveCommand()) -or
+                ($this.GetQueueDepth() -gt 0)) {
+            return $true
+        } else {
+            return $false
+        }
+    }
+
+    [string] GetUptime() {
+        $process = $this.GetServerProcess()
+        if ($null -eq $process) {
+            return $null
+        } elseif ($true -eq $process.HasExited) {
+            return $null
+        } else {
+            $uptime = (Get-Date) - $process.StartTime
+            $uptimeString = $null
+            if ($uptime.Days -gt 0) {
+                $uptimeString += "$(($uptime.TotalDays -split '\.')[0])d"
+            } elseif ($uptime.Hours -gt 0) {
+                $uptimeString += "$(($uptime.TotalHours -split '\.')[0])h"
+            } elseif ($uptime.Minutes -gt 0) {
+                $uptimeString += "$(($uptime.TotalMinutes -split '\.')[0])m"
+            } else {
+                $uptimeString += "$(($uptime.TotalSeconds -split '\.')[0])s"
+            }
+            return $uptimeString
+        }
+    }
+
+    [string] GetStatus() {
+        if ($true -eq $this.ServerIsRunning()) {
+            return 'Running'
+        } elseif ($true -eq $this.UpdateIsRunning()) {
+            return 'Updating'
+        } elseif ($false -eq $this.IsEnabled()) {
+            return 'Disabled'
+        } elseif ($this._properties.ReadProperty('LastExitCode') -ne 0) {
+            return 'Error'
+        } else {
+            return 'Stopped'
+        }
+    }
+
+    [string] GetMonitorStatus() {
+        if ($true -eq $this.MonitorIsRunning()) {
+            if ($true -eq $this.QueueIsBusy()) {
+                return 'Busy'
+            } else {
+                return 'Idle'
+            }
+        } else {
+            return 'Stopped'
+        }
+    }
+
+    [string] GetUpdateStatus() {
+        if ($true -eq $this.UpdateIsRunning()) {
+            return 'InProgress'
+        } elseif ($this._properties.ReadProperty('UpdateSuccess') -eq $false) {
+            return 'Failed'
+        } elseif ($this._properties.ReadProperty('UpdateSuccess') -eq $true) {
+            return 'OK'
+        } else {
+            return 'Unknown'
         }
     }
 
@@ -206,8 +286,8 @@ class VRisingServerProcessMonitor {
         }
     }
 
-    hidden [int] GetQueueDepth() {
-        return $this._properties.ReadProperty('ProcessMonitorCommandQueue').Count
+    hidden [psobject] GetActiveCommand() {
+        return $this._properties.ReadProperty('ProcessMonitorActiveCommand')
     }
 
     hidden [void] EnsureDirPathExists([string]$dirPath) {
@@ -260,7 +340,7 @@ class VRisingServerProcessMonitor {
                 -ArgumentList @(
                     '+force_install_dir', $properties.InstallDir,
                     '+login', 'anonymous',
-                    '+app_update', [VRisingServer]::STEAM_APP_ID,
+                    '+app_update', [VRisingServerProcessMonitor]::STEAM_APP_ID,
                     '+quit'
                 ) `
                 -WindowStyle Hidden `
@@ -302,11 +382,10 @@ class VRisingServerProcessMonitor {
     # start the server process
     hidden [void] LaunchServer() {
         if ($true -eq $this.ServerIsRunning()) {
-            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] server already running")
-            return
+            [VRisingServerLog]::Error("[$($this._properties.ReadProperty('ShortName'))] server already running")
         }
         if ($true -eq $this.UpdateIsRunning()) {
-            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] server is currently updating and cannot be started")
+            [VRisingServerLog]::Error("[$($this._properties.ReadProperty('ShortName'))] server is currently updating and cannot be started")
         }
         $this._properties.WriteProperties(@{
             ServerProcessName = $null
@@ -319,7 +398,7 @@ class VRisingServerProcessMonitor {
             'DataDir'
         ))
         $this.EnsureDirPathExists($properties.LogDir)
-        $logFile = $this._properties.GetLogFilePath([VRisingServerLogType]::File)
+        $logFile = $this._properties.GetLogFilePath([VRisingServerLogType]::Server)
         $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastRun.Info.log"
         $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastRun.Error.log"
         $serverExePath = Join-Path -Path $properties.InstallDir -ChildPath 'VRisingServer.exe'
@@ -398,10 +477,6 @@ class VRisingServerProcessMonitor {
         } finally {
             $this.GetProcessMutex().ReleaseMutex()
         }
-    }
-
-    [bool] IsEnabled() {
-        return $this._properties.ReadProperty('ProcessMonitorEnabled') -eq $true
     }
 
     hidden [bool] MonitorIsRunning() {

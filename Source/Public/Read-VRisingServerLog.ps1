@@ -3,7 +3,7 @@ function Read-VRisingServerLog {
     param(
         [Parameter(Position=1, ParameterSetName='ByShortName')]
         [Parameter(Position=1, ParameterSetName='ByServer')]
-        [VRisingServerLogType] $LogType = [VRisingServerLogType]::File,
+        [VRisingServerLogType] $LogType = [VRisingServerLogType]::Server,
 
         [Parameter(Position=0, ParameterSetName='ByShortName')]
         [string[]] $ShortName,
@@ -26,7 +26,7 @@ function Read-VRisingServerLog {
             $servers = @($Server)
         }
         foreach ($serverItem in $servers) {
-            $logFile = $serverItem.GetLogFilePath($LogType)
+            $logFile = $serverItem._properties.GetLogFilePath($LogType)
             if ($false -eq [string]::IsNullOrWhiteSpace($logFile)) {
                 $shortName = $($serverItem._properties.ReadProperty('ShortName'))
                 $getContentParams = @{
