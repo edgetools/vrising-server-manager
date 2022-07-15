@@ -46,7 +46,7 @@ class VRisingServer {
             -TypeName "VRisingServer" `
             -MemberName Command `
             -MemberType ScriptProperty `
-            -Value { return $this._processMonitor.GetNextCommandName() } `
+            -Value { return $this._processMonitor.GetActiveCommand().Name } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -59,12 +59,6 @@ class VRisingServer {
             -MemberName Uptime `
             -MemberType ScriptProperty `
             -Value { return $this._processMonitor.GetUptime() } `
-            -Force
-        Update-TypeData `
-            -TypeName "VRisingServer" `
-            -MemberName Enabled `
-            -MemberType ScriptProperty `
-            -Value { return $this._properties.ReadProperty('Enabled') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -272,7 +266,6 @@ class VRisingServer {
         $serverProperties = @{
             ShortName = $ShortName
 
-            Enabled = $false
             UpdateOnStartup = $true
 
             DataDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath $ShortName |
@@ -281,44 +274,29 @@ class VRisingServer {
                 Join-Path -ChildPath ([VRisingServer]::INSTALL_DIR_NAME)
             LogDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath $ShortName |
                 Join-Path -ChildPath ([VRisingServer]::LOG_DIR_NAME)
-
-            LastExitCode = 0
-            ProcessId = 0
-            StdoutLogFile = $null
-            StderrLogFile = $null
-
-            UpdateLastExitCode = 0
-            UpdateProcessId = 0
-            UpdateStdoutLogFile = $null
-            UpdateStderrLogFile = $null
-
-            CommandType = $null
-            CommandProcessId = 0
-            CommandStdoutLogFile = $null
-            CommandStderrLogFile = $null
-            CommandFinished = $null
         }
         $server._properties.WriteProperties($serverProperties)
-        [VRisingServerLog]::Info("[$($ShortName)] server created")
+        [VRisingServerLog]::Info("[$($ShortName)] Server created")
     }
 
     static hidden [void] DeleteServer([VRisingServer]$server, [bool]$force) {
-        if (($true -eq $server._processMonitor.MonitorIsRunning()) -and
-                ($true -eq $server._processMonitor.QueueIsBusy()) -and
-                ($false -eq $force)) {
-            [VRisingServerLog]::Error("[$($server._properties.ReadProperty('ShortName'))] cannot remove server while it is busy with $($server._processMonitor.GetActiveCommand().Name) -- wait for command to complete first or use force to override")
-        }
         if (($true -eq $server._processMonitor.ServerIsRunning()) -and ($false -eq $force)) {
-            [VRisingServerLog]::Error("[$($server._properties.ReadProperty('ShortName'))] cannot remove server while it is running -- stop first or use force to override")
+            throw [VRisingServerException]::New("[$($server._properties.ReadProperty('ShortName'))] Cannot remove server while it is running -- Stop the server with 'vrstop' first, or use 'Force' to override")
         }
         if (($true -eq $server._processMonitor.UpdateIsRunning()) -and ($false -eq $force)) {
-            [VRisingServerLog]::Error("[$($server._properties.ReadProperty('ShortName'))] cannot remove server while it is updating -- wait for update to complete or use force to override")
+            throw [VRisingServerException]::New("[$($server._properties.ReadProperty('ShortName'))] Cannot remove server while it is updating -- Wait for update to complete, or use 'Force' to override")
+        }
+        if (($true -eq $server._processMonitor.MonitorIsRunning()) -and ($false -eq $force)) {
+            throw [VRisingServerException]::New("[$($server._properties.ReadProperty('ShortName'))] Cannot remove server while the monitor is running -- Stop the monitor with 'vrdisable' first, or use 'Force' to override")
+        }
+        if (($true -eq $server._processMonitor.MonitorIsRunning()) -and ($false -eq $force)) {
+            throw [VRisingServerException]::New("[$($server._properties.ReadProperty('ShortName'))] Cannot remove server while the monitor is enabled -- Disable the monitor with 'vrdisable' first, or use 'Force' to override")
         }
         $shortName = $($server._properties.ReadProperty('ShortName'))
-        if ($true -eq (Test-Path -LiteralPath $server._filePath -PathType Leaf)) {
-            Remove-Item -LiteralPath $server._filePath
+        if ($true -eq (Test-Path -LiteralPath $server._properties.GetFilePath() -PathType Leaf)) {
+            Remove-Item -LiteralPath $server._properties.GetFilePath()
         }
-        [VRisingServerLog]::Info("[$shortName] server removed")
+        [VRisingServerLog]::Info("[$shortName] Server removed")
     }
 
     # instance variables
@@ -347,15 +325,15 @@ class VRisingServer {
     }
 
     [void] Restart([bool]$force) {
-        $this._processMonitor.Restart()
+        $this._processMonitor.Restart($force)
     }
 
     [void] Enable() {
-        $this._processMonitor.Enable()
+        $this._processMonitor.EnableMonitor()
     }
 
     [void] Disable() {
-        $this._processMonitor.Disable()
+        $this._processMonitor.DisableMonitor()
     }
 
     hidden [string] GetCommandStatus() {

@@ -1,7 +1,7 @@
 enum VRisingServerLogType {
     Server
-    Output
-    Error
+    Run
+    RunError
     Update
     UpdateError
     Monitor

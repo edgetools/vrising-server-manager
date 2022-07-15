@@ -21,10 +21,10 @@ class VRisingServerProperties {
             ([VRisingServerLogType]::Server) {
                 return Join-Path -Path $this.ReadProperty('LogDir') -ChildPath 'VRisingServer.log'
             }
-            ([VRisingServerLogType]::Output) {
+            ([VRisingServerLogType]::Run) {
                 return $this.ReadProperty('StdoutLogFile')
             }
-            ([VRisingServerLogType]::Error) {
+            ([VRisingServerLogType]::RunError) {
                 return $this.ReadProperty('StderrLogFile')
             }
             ([VRisingServerLogType]::Update) {
