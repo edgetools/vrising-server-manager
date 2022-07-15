@@ -1,5 +1,7 @@
+TODO: rethink or remove enable/disable
+- haven't found a use case for leaving the monitor running
 
-TODO: update starting params on create
+TODO: add suggestions for manager options
 
 TODO: add date to lastupdate
 
@@ -15,3 +17,6 @@ TODO: add auto-announcerestart on restarts
 TODO: zip/prune extra log files on rotation
 
 TODO: install steamcmd / rcu for the user
+
+TODO: allow timed shutdown with a cancellation
+- check a value from the file every loop iteration to allow backing out early

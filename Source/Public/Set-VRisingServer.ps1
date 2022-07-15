@@ -5,7 +5,7 @@ function Set-VRisingServer {
         [string[]] $ShortName,
 
         [Parameter(ParameterSetName='ByServer')]
-        [VRisingServer] $Server,
+        [VRisingServer[]] $Server,
 
         [Parameter(Position=1)]
         [VRisingServerSettingsType] $SettingsType,
@@ -23,7 +23,7 @@ function Set-VRisingServer {
     if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
         $servers = [VRisingServer]::FindServers($ShortName)
     } else {
-        $servers = @($Server)
+        $servers = $Server
     }
 
     foreach ($server in $servers) {
@@ -37,6 +37,9 @@ function Set-VRisingServer {
                 }
                 ([VRisingServerSettingsType]::Voip) {
                     $server._settings.SetVoipSetting($SettingName, $SettingValue, $Default)
+                }
+                ([VRisingServerSettingsType]::Service) {
+                    $server._settings.SetServiceSetting($SettingName, $SettingValue, $Default)
                 }
             }
         }

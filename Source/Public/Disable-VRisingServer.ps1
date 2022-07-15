@@ -1,18 +1,18 @@
-function Disable-VRisingServer {
+function Disable-VRisingServerMonitor {
     [CmdletBinding(DefaultParameterSetName='ByShortName')]
     param (
         [Parameter(Position=0, ParameterSetName='ByShortName')]
         [string[]] $ShortName,
 
         [Parameter(ParameterSetName='ByServer', ValueFromPipeline=$true)]
-        [VRisingServer] $Server
+        [VRisingServer[]] $Server
     )
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
             $servers = [VRisingServer]::FindServers($ShortName)
         } else {
-            $servers = @($Server)
+            $servers = $Server
         }
         foreach ($serverItem in $servers) {
             try {
@@ -25,4 +25,4 @@ function Disable-VRisingServer {
     }
 }
 
-Register-ArgumentCompleter -CommandName Disable-VRisingServer -ParameterName ShortName -ScriptBlock $function:ServerShortNameArgumentCompleter
+Register-ArgumentCompleter -CommandName Disable-VRisingServerMonitor -ParameterName ShortName -ScriptBlock $function:ServerShortNameArgumentCompleter

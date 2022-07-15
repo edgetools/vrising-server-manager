@@ -3,13 +3,13 @@ function Read-VRisingServerLog {
     param(
         [Parameter(Position=1, ParameterSetName='ByShortName')]
         [Parameter(Position=1, ParameterSetName='ByServer')]
-        [VRisingServerLogType] $LogType = [VRisingServerLogType]::Server,
+        [VRisingServerLogType] $LogType = [VRisingServerLogType]::Game,
 
         [Parameter(Position=0, ParameterSetName='ByShortName')]
         [string[]] $ShortName,
 
         [Parameter(Position=0, ParameterSetName='ByServer', ValueFromPipeline=$true)]
-        [VRisingServer] $Server,
+        [VRisingServer[]] $Server,
 
         [Parameter()]
         [Alias('Tail')]
@@ -23,7 +23,7 @@ function Read-VRisingServerLog {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
             $servers = [VRisingServer]::FindServers($ShortName)
         } else {
-            $servers = @($Server)
+            $servers = $Server
         }
         foreach ($serverItem in $servers) {
             $logFile = $serverItem._properties.GetLogFilePath($LogType)

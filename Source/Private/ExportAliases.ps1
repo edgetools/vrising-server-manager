@@ -9,8 +9,8 @@ function ExportAliases {
         vrstop = 'Stop-VRisingServer'
         vrupdate = 'Update-VRisingServer'
         vrlog = 'Read-VRisingServerLog'
-        vrenable = 'Enable-VRisingServer'
-        vrdisable = 'Disable-VRisingServer'
+        vrenable = 'Enable-VRisingServerMonitor'
+        vrdisable = 'Disable-VRisingServerMonitor'
         vrrestart = 'Restart-VRisingServer'
         vrset = 'Set-VRisingServer'
     }

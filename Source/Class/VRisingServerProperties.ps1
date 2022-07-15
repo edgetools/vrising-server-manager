@@ -18,14 +18,14 @@ class VRisingServerProperties {
 
     [string] GetLogFilePath([VRisingServerLogType]$logType) {
         switch ($logType) {
-            ([VRisingServerLogType]::Server) {
-                return Join-Path -Path $this.ReadProperty('LogDir') -ChildPath 'VRisingServer.log'
+            ([VRisingServerLogType]::Game) {
+                return $this.ReadProperty('ServiceGameLogFile')
             }
-            ([VRisingServerLogType]::Run) {
-                return $this.ReadProperty('StdoutLogFile')
+            ([VRisingServerLogType]::Service) {
+                return $this.ReadProperty('ServiceStdoutLogFile')
             }
-            ([VRisingServerLogType]::RunError) {
-                return $this.ReadProperty('StderrLogFile')
+            ([VRisingServerLogType]::ServiceError) {
+                return $this.ReadProperty('ServiceStderrLogFile')
             }
             ([VRisingServerLogType]::Update) {
                 return $this.ReadProperty('UpdateStdoutLogFile')
