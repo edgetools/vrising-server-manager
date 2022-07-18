@@ -21,14 +21,20 @@ class VRisingServer {
             -MemberName SaveName `
             -MemberType ScriptProperty `
             -Value { return $this._settings.GetHostSetting('SaveName') } `
-            -SecondValue { param($value) $this.SetHostSetting('SaveName',  $value) } `
+            -SecondValue {
+                param([string]$value)
+                $this.SetHostSetting('SaveName', $value)
+            } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName DisplayName `
             -MemberType ScriptProperty `
             -Value { return $this._settings.GetHostSetting('Name') } `
-            -SecondValue { param($value) $this.SetHostSetting('Name',  $value) } `
+            -SecondValue {
+                param([string]$value)
+                $this.SetHostSetting('Name', $value)
+            } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -64,25 +70,25 @@ class VRisingServer {
             -TypeName "VRisingServer" `
             -MemberName UpdateOnStartup `
             -MemberType ScriptProperty `
-            -Value { return $this._properties.ReadProperty('UpdateOnStartup') } `
+            -Value { return $this._settings.GetServiceSetting('UpdateOnStartup') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName InstallDir `
             -MemberType ScriptProperty `
-            -Value { return $this._properties.ReadProperty('InstallDir') } `
+            -Value { return $this._settings.GetServiceSetting('InstallDir') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName DataDir `
             -MemberType ScriptProperty `
-            -Value { return $this._properties.ReadProperty('DataDir') } `
+            -Value { return $this._settings.GetServiceSetting('DataDir') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName SettingsDir `
             -MemberType ScriptProperty `
-            -Value { return $this.GetSettingsDirPath() } `
+            -Value { return $this._settings.GetSettingsDirPath() } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -94,19 +100,19 @@ class VRisingServer {
             -TypeName "VRisingServer" `
             -MemberName LogDir `
             -MemberType ScriptProperty `
-            -Value { return $this._properties.ReadProperty('LogDir') } `
+            -Value { return $this._settings.GetServiceSetting('LogDir') } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName LogFile `
             -MemberType ScriptProperty `
-            -Value { return $this._properties.GetLogFilePath([VRisingServerLogType]::Server) } `
+            -Value { return $this._properties.GetLogFilePath([VRisingServerLogType]::Game) } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
             -MemberName FilePath `
             -MemberType ScriptProperty `
-            -Value { return $this._filePath } `
+            -Value { return $this._properties.GetFilePath() } `
             -Force
         [VRisingServer]::_configFilePath = Join-Path `
                 -Path ([Environment]::GetEnvironmentVariable('ProgramData')) `
@@ -120,13 +126,22 @@ class VRisingServer {
             Join-Path -ChildPath 'Servers'
         [VRisingServer]::_config = @{
             SkipNewVersionCheck = $false
-            DefaultServerDir = 'D:\VRisingServers'
+            DefaultServersDir = Join-Path -Path 'D:' -ChildPath 'VRisingServerManager' | Join-Path -ChildPath 'Servers'
+            DefaultAppsDir = Join-Path -Path 'D:' -ChildPath 'VRisingServerManager' | Join-Path -ChildPath 'Apps'
             SteamCmdPath = $null
+            MCRCUPath = $null
         }
         [VRisingServer]::LoadConfigFile()
         if (($null -eq [VRisingServer]::_config['SteamCmdPath']) -or ($true -eq ([string]::IsNullOrWhiteSpace([VRisingServer]::_config['SteamCmdPath'])))) {
-            [VRisingServerLog]::Warning("SteamCmdPath is unset -- resolve using: Set-VRisingServerManagerConfigOption SteamCmdPath 'path/to/steamcmd.exe'")
+            [VRisingServerLog]::Warning("SteamCmdPath is unset -- resolve using: vrmset SteamCmdPath 'path/to/steamcmd.exe'")
         }
+        if (($null -eq [VRisingServer]::_config['MCRCUPath']) -or ($true -eq ([string]::IsNullOrWhiteSpace([VRisingServer]::_config['MCRCUPath'])))) {
+            [VRisingServerLog]::Warning("MCRCUPath is unset -- resolve using: vrmset MCRCUPath 'path/to/mcrcu.exe'")
+        }
+    }
+
+    static hidden [string] GetDefaultServersDir() {
+        return [VRisingServer]::_config['DefaultServersDir']
     }
 
     static hidden [psobject[]] GetConfigValue([string]$configKey) {
@@ -154,11 +169,17 @@ class VRisingServer {
         if ($true -eq ($configFileContents.PSObject.Properties.Name -contains 'SkipNewVersionCheck')) {
             [VRisingServer]::_config['SkipNewVersionCheck'] = $configFileContents.SkipNewVersionCheck
         }
-        if ($true -eq ($configFileContents.PSObject.Properties.Name -contains 'DefaultServerDir')) {
-            [VRisingServer]::_config['DefaultServerDir'] = $configFileContents.DefaultServerDir
+        if ($true -eq ($configFileContents.PSObject.Properties.Name -contains 'DefaultServersDir')) {
+            [VRisingServer]::_config['DefaultServersDir'] = $configFileContents.DefaultServersDir
+        }
+        if ($true -eq ($configFileContents.PSObject.Properties.Name -contains 'DefaultAppsDir')) {
+            [VRisingServer]::_config['DefaultAppsDir'] = $configFileContents.DefaultAppsDir
         }
         if ($true -eq ($configFileContents.PSObject.Properties.Name -contains 'SteamCmdPath')) {
             [VRisingServer]::_config['SteamCmdPath'] = $configFileContents.SteamCmdPath
+        }
+        if ($true -eq ($configFileContents.PSObject.Properties.Name -contains 'MCRCUPath')) {
+            [VRisingServer]::_config['MCRCUPath'] = $configFileContents.MCRCUPath
         }
     }
 
@@ -172,8 +193,9 @@ class VRisingServer {
         }
         $configFile = [PSCustomObject]@{
             SkipNewVersionCheck = [VRisingServer]::_config['SkipNewVersionCheck']
-            DefaultServerDir = [VRisingServer]::_config['DefaultServerDir']
+            DefaultServersDir = [VRisingServer]::_config['DefaultServersDir']
             SteamCmdPath = [VRisingServer]::_config['SteamCmdPath']
+            MCRCUPath = [VRisingServer]::_config['MCRCUPath']
         }
         $configFileJson = ConvertTo-Json -InputObject $configFile -Depth 5
         $configFileJson | Out-File -LiteralPath ([VRisingServer]::_configFilePath)
@@ -218,8 +240,8 @@ class VRisingServer {
         return Test-Path -LiteralPath ([VRisingServer]::_serverFileDir) -PathType Container
     }
 
-    static hidden [string] GetServerFilePath([string]$ShortName) {
-        return Join-Path -Path ([VRisingServer]::_serverFileDir) -ChildPath "$ShortName.json"
+    static hidden [string] GetServerFilePath([string]$shortName) {
+        return Join-Path -Path ([VRisingServer]::_serverFileDir) -ChildPath "$shortName.json"
     }
 
     static hidden [System.IO.FileInfo[]] GetServerFiles() {
@@ -255,28 +277,42 @@ class VRisingServer {
         return $server
     }
 
-    static hidden [void] CreateServer([string]$ShortName) {
-        if ($false -eq ($ShortName -match '^[0-9A-Za-z-_]+$')) {
-            throw [VRisingServerException]::New("Server '$ShortName' is not a valid name -- allowed characters: [A-Z] [a-z] [0-9] [-] [_]")
+    static hidden [void] EnsureShortNameIsValid([string]$shortName) {
+        if ($false -eq ($shortName -match '^[0-9A-Za-z-_]+$')) {
+            throw [VRisingServerException]::New("Server '$shortName' is not a valid name -- allowed characters: [A-Z] [a-z] [0-9] [-] [_]")
         }
-        if ([VRisingServer]::GetShortNames() -contains $ShortName) {
-            throw [VRisingServerException]::New("Server '$ShortName' already exists")
+    }
+
+    static hidden [void] EnsureDirPathIsValid([string]$dirPath) {
+        if ($false -eq (Test-Path -LiteralPath $dirPath -PathType Container -IsValid)) {
+            throw [VRisingServerException]::New("Invalid path: $dirPath")
         }
-        $server = [VRisingServer]::New([VRisingServer]::GetServerFilePath($ShortName), $ShortName)
+    }
+
+    static hidden [void] CreateServer(
+            [string]$shortName,
+            [string]$dataDir,
+            [string]$installDir,
+            [string]$logDir) {
+        [VRisingServer]::EnsureShortNameIsValid($shortName)
+        [VRisingServer]::EnsureDirPathIsValid($dataDir)
+        [VRisingServer]::EnsureDirPathIsValid($installDir)
+        [VRisingServer]::EnsureDirPathIsValid($logDir)
+        if ([VRisingServer]::GetShortNames() -contains $shortName) {
+            throw [VRisingServerException]::New("Server '$shortName' already exists")
+        }
+        $server = [VRisingServer]::New([VRisingServer]::GetServerFilePath($shortName), $shortName)
         $serverProperties = @{
-            ShortName = $ShortName
-
-            UpdateOnStartup = $true
-
-            DataDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath $ShortName |
-                Join-Path -ChildPath ([VRisingServer]::DATA_DIR_NAME)
-            InstallDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath $ShortName |
-                Join-Path -ChildPath ([VRisingServer]::INSTALL_DIR_NAME)
-            LogDir = Join-Path -Path ([VRisingServer]::_config['DefaultServerDir']) -ChildPath $ShortName |
-                Join-Path -ChildPath ([VRisingServer]::LOG_DIR_NAME)
+            ShortName = $shortName
+            ServiceSettings = @{
+                DataDir = $dataDir
+                InstallDir = $installDir
+                LogDir = $logDir
+                UpdateOnStartup = $true
+            }
         }
         $server._properties.WriteProperties($serverProperties)
-        [VRisingServerLog]::Info("[$($ShortName)] Server created")
+        [VRisingServerLog]::Info("[$($shortName)] Server created")
     }
 
     static hidden [void] DeleteServer([VRisingServer]$server, [bool]$force) {
@@ -308,7 +344,7 @@ class VRisingServer {
     VRisingServer([string]$filePath, [string]$shortName) {
         $this._properties = [VRisingServerProperties]::New($filePath)
         $this._settings = [VRisingServerSettings]::New($this._properties)
-        $this._processMonitor = [VRisingServerProcessMonitor]::New($this._properties)
+        $this._processMonitor = [VRisingServerProcessMonitor]::New($this._properties, $this._settings)
     }
 
     # instance methods
@@ -336,20 +372,7 @@ class VRisingServer {
         $this._processMonitor.DisableMonitor()
     }
 
-    hidden [string] GetCommandStatus() {
-        return 'TODO: REMOVE'
-        # if ($true -eq $this.CommandIsRunning()) {
-        #     return 'Executing'
-        # } elseif ($this._properties.ReadProperty('CommandFinished') -eq $true) {
-        #     return 'OK'
-        # } elseif ($this._properties.ReadProperty('CommandFinished') -eq $false) {
-        #     return 'Error'
-        # } else {
-        #     return 'Unknown'
-        # }
-    }
-
     hidden [string] GetSavesDirPath() {
-        return Join-Path -Path $this._properties.ReadProperty('DataDir') -ChildPath ([VRisingServer]::SAVES_DIR_NAME)
+        return Join-Path -Path $this._settings.GetServiceSetting('DataDir') -ChildPath ([VRisingServer]::SAVES_DIR_NAME)
     }
 }

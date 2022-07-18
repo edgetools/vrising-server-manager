@@ -4,13 +4,34 @@ class VRisingServerSettingsMap {
     static VRisingServerSettingsMap() {
         [VRisingServerSettingsMap]::_map = @{
             Host = @{
-                Secure = [bool]
-                ListOnMasterServer = [bool]
                 AdminOnlyDebugEvents = [bool]
+                DayOfReset = @('Any', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
                 DisableDebugEvents = [bool]
+                GameSettingsPreset = @(
+                    'DuoPvP',
+                    'HardcoreDuoPvP',
+                    'HardcorePvP',
+                    'Level30PvE',
+                    'Level30PvP',
+                    'Level50PvE',
+                    'Level50PvP',
+                    'Level70PvE',
+                    'Level70PvP',
+                    'SoloPvP',
+                    'StandardPvE',
+                    'StandardPvE_Easy',
+                    'StandardPvE_Hard',
+                    'StandardPvP',
+                    'StandardPvP_Easy',
+                    'StandardPvP_Hard',
+                    ''
+                )
+                LanMode = [bool]
+                ListOnMasterServer = [bool]
                 Rcon = @{
                     Enabled = [bool]
                 }
+                Secure = [bool]
             }
             Game = @{
                 GameModeType = @('PvP', 'PvE')
@@ -41,6 +62,9 @@ class VRisingServerSettingsMap {
             }
             Voip = @{
                 VOIPEnabled = [bool]
+            }
+            Service = @{
+                UpdateOnStartup = [bool]
             }
         }
     }

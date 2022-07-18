@@ -5,14 +5,14 @@ function Start-VRisingServer {
         [string[]] $ShortName,
 
         [Parameter(ParameterSetName='ByServer', ValueFromPipeline=$true)]
-        [VRisingServer] $Server
+        [VRisingServer[]] $Server
     )
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
             $servers = [VRisingServer]::FindServers($ShortName)
         } else {
-            $servers = @($Server)
+            $servers = $Server
         }
         foreach ($serverItem in $servers) {
             try {

@@ -1,44 +1,43 @@
 class VRisingServerProcessMonitor {
     static hidden [int] $STEAM_APP_ID = 1829350
+    static hidden [int] $LAUNCH_STABILIZATION_DELAY = 5
 
     hidden [VRisingServerProperties] $_properties
+    hidden [VRisingServerSettings] $_settings
 
     hidden [System.Threading.Mutex] $_processMutex
     hidden [System.Threading.Mutex] $_commandMutex
 
     hidden [int] $_defaultPollingRate = 1
 
-    VRisingServerProcessMonitor([VRisingServerProperties]$properties) {
+    VRisingServerProcessMonitor([VRisingServerProperties]$properties, [VRisingServerSettings]$settings) {
         $this._properties = $properties
+        $this._settings = $settings
     }
 
     [void] Run() {
         $keepRunning = $true
-        $properties = $null
+        $shortName = $this._properties.ReadProperty('ShortName')
         try {
-            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] Monitor starting")
+            [VRisingServerLog]::Info("[$shortName] Monitor starting")
             while ($true -eq $keepRunning) {
-                $properties = $this._properties.ReadProperties(@(
-                    'ShortName',
-                    'ProcessMonitorEnabled',
-                    'UpdateOnStartup'
-                ))
-                if ($false -eq $properties.ProcessMonitorEnabled) {
+                $processMonitorEnabled = $this.IsEnabled()
+                if ($false -eq $processMonitorEnabled) {
                     $keepRunning = $false
-                    [VRisingServerLog]::Info("[$($properties.ShortName)] Monitor disabled")
+                    [VRisingServerLog]::Info("[$shortName] Monitor disabled")
                     continue
                 }
+                # check for a command to run
                 $activeCommand = $this.GetActiveCommand()
                 if ($null -ne $activeCommand) {
-                    $this._properties.WriteProperty('ProcessMonitorActiveCommand', $activeCommand)
-                    [VRisingServerLog]::Info("[$($properties.ShortName)] Processing command: $($activeCommand.Name)")
+                    [VRisingServerLog]::Info("[$shortName] Processing command: $($activeCommand.Name)")
                     switch ($activeCommand.Name) {
                         'Start' {
-                            if ($true -eq $properties.UpdateOnStartup) {
+                            $updateOnStartup = $this._settings.GetServiceSetting('UpdateOnStartup')
+                            if ($true -eq $updateOnStartup) {
                                 $this.UpdateServer()
                             }
                             $this.LaunchServer()
-                            # TODO wait for server to start and stabilize for... 30 seconds?
                             break
                         }
                         'Stop' {
@@ -53,20 +52,21 @@ class VRisingServerProcessMonitor {
                             if ($true -eq $this.ServerIsRunning()) {
                                 $this.KillServer($activeCommand.Force)
                             }
-                            if ($true -eq $properties.UpdateOnStartup) {
+                            $updateOnStartup = $this._settings.GetServiceSetting('UpdateOnStartup')
+                            if ($true -eq $updateOnStartup) {
                                 $this.UpdateServer()
                             }
                             $this.LaunchServer()
                         }
                     }
-                    $this._properties.WriteProperty('ProcessMonitorActiveCommand', $null)
-                    [VRisingServerLog]::Info("[$($properties.ShortName)] Command processed: $($activeCommand.Name)")
+                    $this.SetActiveCommand($null)
+                    [VRisingServerLog]::Info("[$shortName] Command processed: $($activeCommand.Name)")
                 }
                 Start-Sleep -Seconds $this.GetPollingRate()
             }
         } finally {
-            $this._properties.WriteProperty('ProcessMonitorActiveCommand', $null)
-            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] Monitor is exiting")
+            $this.SetActiveCommand($null)
+            [VRisingServerLog]::Info("[$shortName] Monitor is exiting")
         }
     }
 
@@ -130,15 +130,16 @@ class VRisingServerProcessMonitor {
     }
 
     [void] KillMonitor([bool]$force) {
-        $this.KillProcess('Monitor', $this.GetMonitorProcess(), $force)
+        [void] $this.KillProcess('Monitor', $this.GetMonitorProcess(), $force)
     }
 
     [void] KillServer([bool]$force) {
-        $this.KillProcess('Server', $this.GetServerProcess(), $force)
+        $exitCode = $this.KillProcess('Server', $this.GetServerProcess(), $force)
+        $this._properties.WriteProperty('ServiceProcessExitCode', $exitCode)
     }
 
     [void] KillUpdate([bool]$force) {
-        $this.KillProcess('Update', $this.GetUpdateProcess(), $force)
+        [void] $this.KillProcess('Update', $this.GetUpdateProcess(), $force)
     }
 
     [bool] IsBusy() {
@@ -172,8 +173,12 @@ class VRisingServerProcessMonitor {
             return 'Running'
         } elseif ($true -eq $this.UpdateIsRunning()) {
             return 'Updating'
-        } elseif ($this._properties.ReadProperty('LastExitCode') -ne 0) {
-            return 'Error'
+        } elseif ($null -ne $this._properties.ReadProperty('ServiceProcessExitCode')) {
+            if ($this._properties.ReadProperty('ServiceProcessExitCode') -eq 0) {
+                return 'Stopped'
+            } else {
+                return 'Error'
+            }
         } else {
             return 'Stopped'
         }
@@ -205,7 +210,11 @@ class VRisingServerProcessMonitor {
         }
     }
 
-    hidden [void] KillProcess([string]$friendlyName, [System.Diagnostics.Process]$process, [bool]$force) {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', '', Scope='Function')]
+    # must disable this warning due to https://stackoverflow.com/a/23797762
+    # $handle is declared but not used to cause $process to cache it
+    # ensures that $process can access $process.ExitCode
+    hidden [int] KillProcess([string]$friendlyName, [System.Diagnostics.Process]$process, [bool]$force) {
         if ($false -eq $this.ProcessIsRunning($process)) {
             throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] $friendlyName already stopped")
         }
@@ -214,9 +223,16 @@ class VRisingServerProcessMonitor {
         } else {
             [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] Gracefully killing $friendlyName process")
         }
-        & taskkill.exe '/PID' $process.Id $(if ($true -eq $force) { '/F' })
-        $process.WaitForExit()
-        [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] $friendlyName process has stopped")
+        try {
+            & taskkill.exe '/PID' $process.Id $(if ($true -eq $force) { '/F' })
+            $handle = $process.Handle
+            $process.WaitForExit()
+            $exitCode = $process.ExitCode
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] $friendlyName process has stopped with exit code: $exitCode")
+            return $exitCode
+        } finally {
+            $process.Close()
+        }
     }
 
     hidden [void] SendCommand([pscustomobject]$command) {
@@ -261,6 +277,12 @@ class VRisingServerProcessMonitor {
         return $this._properties.ReadProperty('ProcessMonitorActiveCommand')
     }
 
+    hidden [void] EnsureValueExists([string]$value, [string]$name) {
+        if ($true -eq ([string]::IsNullOrWhiteSpace($value))) {
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] Value for $name is missing")
+        }
+    }
+
     hidden [void] EnsureDirPathExists([string]$dirPath) {
         if ($false -eq (Test-Path -LiteralPath $dirPath -PathType Container)) {
             New-Item -Path $dirPath -ItemType Directory | Out-Null
@@ -287,29 +309,30 @@ class VRisingServerProcessMonitor {
     # $handle is declared but not used to cause $process to cache it
     # ensures that $process can access $process.ExitCode
     hidden [void] UpdateServer() {
+        $shortName = $this._properties.ReadProperty('ShortName')
         if ($true -eq $this.UpdateIsRunning()) {
-            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] Update is already running")
+            throw [VRisingServerException]::New("[$shortName] Update is already running")
         }
         if ($true -eq $this.ServerIsRunning()) {
-            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] Server must be stopped before updating")
+            throw [VRisingServerException]::New("[$shortName] Server must be stopped before updating")
         }
-        $properties = $this._properties.ReadProperties(@(
-            'ShortName',
-            'LogDir',
-            'InstallDir'
-        ))
-        $this.EnsureDirPathExists($properties.LogDir)
-        $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastUpdate.Info.log"
-        $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastUpdate.Error.log"
+        $serviceSettings = $this._settings.GetServiceSetting('')
+        $installDir = $this._settings.GetSetting($serviceSettings, 'InstallDir')
+        $logDir = $this._settings.GetSetting($serviceSettings, 'LogDir')
+        $this.EnsureValueExists($installDir, 'InstallDir')
+        $this.EnsureValueExists($logDir, 'LogDir')
+        $this.EnsureDirPathExists($logDir)
+        $stdoutLogFile = Join-Path -Path $logDir -ChildPath "VRisingServer.LastUpdate.Info.log"
+        $stderrLogFile = Join-Path -Path $logDir -ChildPath "VRisingServer.LastUpdate.Error.log"
         $process = $null
         $updateSucceeded = $false
         $updateDate = Get-Date -Format 'yyyy-MM-ddTHH:mm:ss'
         try {
-            [VRisingServerLog]::Info("[$($properties.ShortName)] Starting update")
+            [VRisingServerLog]::Info("[$shortName] Starting update")
             $process = Start-Process `
                 -FilePath ([VRisingServer]::_config['SteamCmdPath']) `
                 -ArgumentList @(
-                    '+force_install_dir', $properties.InstallDir,
+                    '+force_install_dir', $installDir,
                     '+login', 'anonymous',
                     '+app_update', [VRisingServerProcessMonitor]::STEAM_APP_ID,
                     '+quit'
@@ -327,13 +350,13 @@ class VRisingServerProcessMonitor {
             })
             $process.WaitForExit()
             if ($process.ExitCode -ne 0) {
-                throw [VRisingServerException]::New("[$($properties.ShortName)] Update process exited with non-zero code: $($process.ExitCode)")
+                throw [VRisingServerException]::New("[$shortName] Update process exited with non-zero code: $($process.ExitCode)")
             } else {
                 $updateSucceeded = $true
-                [VRisingServerLog]::Info("[$($properties.ShortName)] Update completed successfully")
+                [VRisingServerLog]::Info("[$shortName] Update completed successfully")
             }
         } catch [InvalidOperationException] {
-            throw [VRisingServerException]::New("[$($properties.ShortName)] Failed starting update: $($_.Exception.Message)")
+            throw [VRisingServerException]::New("[$shortName] Failed starting update: $($_.Exception.Message)")
         } finally {
             if ($null -ne $process) {
                 $process.Close()
@@ -351,48 +374,75 @@ class VRisingServerProcessMonitor {
     }
 
     # start the server process
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', '', Scope='Function')]
+    # must disable this warning due to https://stackoverflow.com/a/23797762
+    # $handle is declared but not used to cause $process to cache it
+    # ensures that $process can access $process.ExitCode
     hidden [void] LaunchServer() {
+        $shortName = $this._properties.ReadProperty('ShortName')
         if ($true -eq $this.ServerIsRunning()) {
-            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] Server is already running")
+            throw [VRisingServerException]::New("[$shortName] Server is already running")
         }
         if ($true -eq $this.UpdateIsRunning()) {
-            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] Server is currently updating and cannot be Started")
+            throw [VRisingServerException]::New("[$shortName] Server is currently updating and cannot be started")
         }
-        $this._properties.WriteProperties(@{
-            ServerProcessName = $null
-            ServerProcessId = 0
-        })
-        $properties = $this._properties.ReadProperties(@(
-            'ShortName',
-            'LogDir',
-            'InstallDir',
-            'DataDir'
-        ))
-        $this.EnsureDirPathExists($properties.LogDir)
-        $logFile = $this._properties.GetLogFilePath([VRisingServerLogType]::Server)
-        $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastRun.Info.log"
-        $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.LastRun.Error.log"
-        $serverExePath = Join-Path -Path $properties.InstallDir -ChildPath 'VRisingServer.exe'
+        $serviceSettings = $this._settings.GetServiceSetting('')
+        $installDir = $this._settings.GetSetting($serviceSettings, 'InstallDir')
+        $dataDir = $this._settings.GetSetting($serviceSettings, 'DataDir')
+        $logDir = $this._settings.GetSetting($serviceSettings, 'LogDir')
+        $this.EnsureValueExists($installDir, 'InstallDir')
+        $this.EnsureValueExists($dataDir, 'DataDir')
+        $this.EnsureValueExists($logDir, 'LogDir')
+        $this.EnsureDirPathExists($logDir)
+        $gameLogFile = Join-Path -Path $logDir -ChildPath 'VRisingServer.log'
+        $stdoutLogFile = Join-Path -Path $logDir -ChildPath "VRisingServer.LastRun.Info.log"
+        $stderrLogFile = Join-Path -Path $logDir -ChildPath "VRisingServer.LastRun.Error.log"
+        $serverExePath = Join-Path -Path $installDir -ChildPath 'VRisingServer.exe'
+        $process = $null
+        $exitCode = $null
         try {
             $process = Start-Process `
                 -WindowStyle Hidden `
                 -RedirectStandardOutput $stdoutLogFile `
                 -RedirectStandardError $stderrLogFile `
                 -FilePath $serverExePath `
-                -ArgumentList "-persistentDataPath `"$($properties.DataDir)`" -logFile `"$logFile`"" `
+                -ArgumentList "-persistentDataPath `"$dataDir`" -logFile `"$gameLogFile`"" `
                 -PassThru
+            $handle = $process.Handle
+            [VRisingServerLog]::Info("[$shortName] Waiting $([VRisingServerProcessMonitor]::LAUNCH_STABILIZATION_DELAY) seconds while server launches ...")
+            Start-Sleep -Seconds ([VRisingServerProcessMonitor]::LAUNCH_STABILIZATION_DELAY)
+            if ($true -eq $process.HasExited) {
+                $exitCode = $process.ExitCode
+                throw [VRisingServerException]::New("[$shortName] Server exited early with code: $exitCode")
+            } else {
+                [VRisingServerLog]::Info("[$shortName] Server launched")
+            }
         } catch [System.IO.DirectoryNotFoundException] {
-            throw [VRisingServerException]::New("[$($properties.ShortName)] Server failed to start due to missing directory -- try running update first")
+            throw [VRisingServerException]::New("[$shortName] Server failed to start due to missing directory -- try running update first")
         } catch [InvalidOperationException] {
-            throw [VRisingServerException]::New("[$($properties.ShortName)] Server failed to start: $($_.Exception.Message)")
+            throw [VRisingServerException]::New("[$shortName] Server failed to start: $($_.Exception.Message)")
+        } finally {
+            if ($null -ne $process) {
+                $this._properties.WriteProperties(@{
+                    ServiceProcessName = $process.Name
+                    ServiceProcessId = $process.Id
+                    ServiceProcessExitCode = $exitCode
+                    ServiceGameLogFile = $gameLogFile
+                    ServiceStdoutLogFile = $stdoutLogFile
+                    ServiceStderrLogFile = $stderrLogFile
+                })
+                $process.Close
+            } else {
+                $this._properties.WriteProperties(@{
+                    ServiceProcessName = $null
+                    ServiceProcessId = $null
+                    ServiceProcessExitCode = $null
+                    ServiceGameLogFile = $gameLogFile
+                    ServiceStdoutLogFile = $stdoutLogFile
+                    ServiceStderrLogFile = $stderrLogFile
+                })
+            }
         }
-        $this._properties.WriteProperties(@{
-            ServerProcessName = $process.Name
-            ServerProcessId = $process.Id
-            ServerStdoutLogFile = $stdoutLogFile
-            ServerStderrLogFile = $stderrLogFile
-        })
-        [VRisingServerLog]::Info("[$($properties.shortName)] Server launched")
     }
 
     # start the background process
@@ -407,18 +457,13 @@ class VRisingServerProcessMonitor {
             if ($true -eq $this.MonitorIsRunning()) {
                 return
             }
-            $this._properties.WriteProperties(@{
-                ProcessMonitorProcessName = $null
-                ProcessMonitorProcessId = 0
-                ProcessMonitorEnabled = $true
-            })
-            $properties = $this._properties.ReadProperties(@(
-                'ShortName',
-                'LogDir'
-            ))
-            $this.EnsureDirPathExists($properties.LogDir)
-            $stdoutLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.ProcessMonitor.Info.log"
-            $stderrLogFile = Join-Path -Path $properties.LogDir -ChildPath "VRisingServer.ProcessMonitor.Error.log"
+            $shortName = $this._properties.ReadProperty('ShortName')
+            $this._properties.WriteProperty('ProcessMonitorEnabled', $true)
+            $logDir = $this._settings.GetServiceSetting('LogDir')
+            $this.EnsureValueExists($logDir, 'LogDir')
+            $this.EnsureDirPathExists($logDir)
+            $stdoutLogFile = Join-Path -Path $logDir -ChildPath "VRisingServer.ProcessMonitor.Info.log"
+            $stderrLogFile = Join-Path -Path $logDir -ChildPath "VRisingServer.ProcessMonitor.Error.log"
             $argumentList = @"
 -Command "& {
     `$ErrorActionPreference = 'Stop';
@@ -427,7 +472,7 @@ class VRisingServerProcessMonitor {
     }
     `$script:VRisingServerManagerFlags['SkipNewVersionCheck'] = `$true;
     `$script:VRisingServerManagerFlags['ShowDateTime'] = `$true;
-    `$server = Get-VRisingServer -ShortName '$($properties.shortName)';
+    `$server = Get-VRisingServer -ShortName '$shortName';
     `$server._processMonitor.Run();
 }"
 "@
@@ -444,7 +489,10 @@ class VRisingServerProcessMonitor {
                 ProcessMonitorStdoutLogFile = $stdoutLogFile
                 ProcessMonitorStderrLogFile = $stderrLogFile
             })
-            [VRisingServerLog]::Info("[$($properties.shortName)] Monitor launched")
+            [VRisingServerLog]::Info("[$shortName] Monitor launched")
+        } catch {
+            $this.SetActiveCommand($null)
+            throw $_
         } finally {
             $this.GetProcessMutex().ReleaseMutex()
         }
@@ -477,7 +525,7 @@ class VRisingServerProcessMonitor {
     }
 
     hidden [System.Diagnostics.Process] GetServerProcess() {
-        return $this.GetProcessByProperties('ServerProcessId', 'ServerProcessName')
+        return $this.GetProcessByProperties('ServiceProcessId', 'ServiceProcessName')
     }
 
     hidden [System.Diagnostics.Process] GetUpdateProcess() {

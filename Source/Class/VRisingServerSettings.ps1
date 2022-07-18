@@ -21,19 +21,24 @@ class VRisingServerSettings {
         return $this.GetSettingsTypeValue([VRisingServerSettingsType]::Voip, $settingName)
     }
 
+    [psobject] GetServiceSetting([string]$settingName) {
+        return $this.GetSettingsTypeValue([VRisingServerSettingsType]::Service, $settingName)
+    }
+
     [void] SetHostSetting([string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
         $this.SetSettingsTypeValue([VRisingServerSettingsType]::Host, $settingName, $settingValue, $resetToDefault)
-        [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] Host Setting '$settingName' modified")
     }
 
     [void] SetGameSetting([string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
         $this.SetSettingsTypeValue([VRisingServerSettingsType]::Game, $settingName, $settingValue, $resetToDefault)
-        [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] Game Setting '$settingName' modified")
     }
 
     [void] SetVoipSetting([string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
         $this.SetSettingsTypeValue([VRisingServerSettingsType]::Voip, $settingName, $settingValue, $resetToDefault)
-        [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] Voip Setting '$settingName' modified")
+    }
+
+    [void] SetServiceSetting([string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
+        $this.SetSettingsTypeValue([VRisingServerSettingsType]::Service, $settingName, $settingValue, $resetToDefault)
     }
 
     hidden [void] SetSettingsTypeValue([VRisingServerSettingsType]$settingsType, [string]$settingName, [psobject]$settingValue, [bool]$resetToDefault) {
@@ -48,15 +53,19 @@ class VRisingServerSettings {
                 $defaultSettings = $null
                 switch ($settingsType) {
                     ([VRisingServerSettingsType]::Host) {
-                        $defaultSettings = $this.GetDefaultHostSettingsFile()
+                        $defaultSettings = $this.GetDefaultHostSettings()
                         break
                     }
                     ([VRisingServerSettingsType]::Game) {
-                        $defaultSettings = $this.GetDefaultGameSettingsFile()
+                        $defaultSettings = $this.GetDefaultGameSettings()
                         break
                     }
                     ([VRisingServerSettingsType]::Voip) {
-                        $defaultSettings = $this.GetDefaultVoipSettingsFile()
+                        $defaultSettings = $this.GetDefaultVoipSettings()
+                        break
+                    }
+                    ([VRisingServerSettingsType]::Service) {
+                        $defaultSettings = $this.GetDefaultServiceSettings()
                         break
                     }
                 }
@@ -70,21 +79,21 @@ class VRisingServerSettings {
 
             # read the file
             $explicitSettings = $null
-            $settingsFilePath = $null
             switch ($settingsType) {
                 ([VRisingServerSettingsType]::Host) {
-                    $explicitSettings = $this.GetHostSettingsFile()
-                    $settingsFilePath = $this.GetHostSettingsFilePath()
+                    $explicitSettings = $this.GetHostSettings()
                     break
                 }
                 ([VRisingServerSettingsType]::Game) {
-                    $explicitSettings = $this.GetGameSettingsFile()
-                    $settingsFilePath = $this.GetGameSettingsFilePath()
+                    $explicitSettings = $this.GetGameSettings()
                     break
                 }
                 ([VRisingServerSettingsType]::Voip) {
-                    $explicitSettings = $this.GetVoipSettingsFile()
-                    $settingsFilePath = $this.GetVoipSettingsFilePath()
+                    $explicitSettings = $this.GetVoipSettings()
+                    break
+                }
+                ([VRisingServerSettingsType]::Service) {
+                    $explicitSettings = $this.GetServiceSettings()
                     break
                 }
             }
@@ -97,8 +106,25 @@ class VRisingServerSettings {
             }
 
             # write the file
-            $explicitSettingsJson = ConvertTo-Json -InputObject $explicitSettings -Depth 5
-            $explicitSettingsJson | Out-File -LiteralPath $settingsFilePath
+            switch ($settingsType) {
+                ([VRisingServerSettingsType]::Host) {
+                    $this.SaveHostSettings($explicitSettings)
+                    break
+                }
+                ([VRisingServerSettingsType]::Game) {
+                    $this.SaveGameSettings($explicitSettings)
+                    break
+                }
+                ([VRisingServerSettingsType]::Voip) {
+                    $this.SaveVoipSettings($explicitSettings)
+                    break
+                }
+                ([VRisingServerSettingsType]::Service) {
+                    $this.SaveServiceSettings($explicitSettings)
+                    break
+                }
+            }
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] $settingsType Setting '$settingName' modified")
         } finally {
             # unlock mutex
             $this._settingsFileMutex.ReleaseMutex()
@@ -110,18 +136,23 @@ class VRisingServerSettings {
         $explicitSettings = $null
         switch ($settingsType) {
             ([VRisingServerSettingsType]::Host) {
-                $defaultSettings = $this.GetDefaultHostSettingsFile()
-                $explicitSettings = $this.GetHostSettingsFile()
+                $defaultSettings = $this.GetDefaultHostSettings()
+                $explicitSettings = $this.GetHostSettings()
                 break
             }
             ([VRisingServerSettingsType]::Game) {
-                $defaultSettings = $this.GetDefaultGameSettingsFile()
-                $explicitSettings = $this.GetGameSettingsFile()
+                $defaultSettings = $this.GetDefaultGameSettings()
+                $explicitSettings = $this.GetGameSettings()
                 break
             }
             ([VRisingServerSettingsType]::Voip) {
-                $defaultSettings = $this.GetDefaultVoipSettingsFile()
-                $explicitSettings = $this.GetVoipSettingsFile()
+                $defaultSettings = $this.GetDefaultVoipSettings()
+                $explicitSettings = $this.GetVoipSettings()
+                break
+            }
+            ([VRisingServerSettingsType]::Service) {
+                $defaultSettings = $this.GetDefaultServiceSettings()
+                $explicitSettings = $this.GetServiceSettings()
                 break
             }
         }
@@ -141,15 +172,19 @@ class VRisingServerSettings {
         $settings = $null
         switch ($settingsType) {
             ([VRisingServerSettingsType]::Host) {
-                $settings = $this.GetDefaultHostSettingsFile()
+                $settings = $this.GetDefaultHostSettings()
                 break
             }
             ([VRisingServerSettingsType]::Game) {
-                $settings = $this.GetDefaultGameSettingsFile()
+                $settings = $this.GetDefaultGameSettings()
                 break
             }
             ([VRisingServerSettingsType]::Voip) {
-                $settings = $this.GetDefaultVoipSettingsFile()
+                $settings = $this.GetDefaultVoipSettings()
+                break
+            }
+            ([VRisingServerSettingsType]::Service) {
+                $settings = $this.GetDefaultServiceSettings()
                 break
             }
         }
@@ -391,16 +426,41 @@ class VRisingServerSettings {
         return $null
     }
 
-    hidden [PSCustomObject] GetHostSettingsFile() {
+    hidden [void] WriteSettingsFile([string]$filePath, [psobject]$settings) {
+        $settingsJson = ConvertTo-Json -InputObject $settings -Depth 5
+        $settingsJson | Out-File -LiteralPath $filePath
+    }
+
+    hidden [PSCustomObject] GetHostSettings() {
         return $this.ReadSettingsFile($this.GetHostSettingsFilePath())
     }
 
-    hidden [PSCustomObject] GetGameSettingsFile() {
+    hidden [PSCustomObject] GetGameSettings() {
         return $this.ReadSettingsFile($this.GetGameSettingsFilePath())
     }
 
-    hidden [PSCustomObject] GetVoipSettingsFile() {
+    hidden [PSCustomObject] GetVoipSettings() {
         return $this.ReadSettingsFile($this.GetVoipSettingsFilePath())
+    }
+
+    hidden [PSCustomObject] GetServiceSettings() {
+        return $this._properties.ReadProperty('ServiceSettings')
+    }
+
+    hidden [void] SaveHostSettings([psobject]$settings) {
+        $this.WriteSettingsFile($this.GetHostSettingsFilePath(), $settings)
+    }
+
+    hidden [void] SaveGameSettings([psobject]$settings) {
+        $this.WriteSettingsFile($this.GetGameSettingsFilePath(), $settings)
+    }
+
+    hidden [void] SaveVoipSettings([psobject]$settings) {
+        $this.WriteSettingsFile($this.GetVoipSettingsFilePath(), $settings)
+    }
+
+    hidden [void] SaveServiceSettings([psobject]$settings) {
+        $this._properties.WriteProperty('ServiceSettings', $settings)
     }
 
     hidden [string] GetDefaultHostSettingsFilePath() {
@@ -423,25 +483,25 @@ class VRisingServerSettings {
         return Join-Path -Path $this.GetSettingsDirPath() -ChildPath 'ServerVoipSettings.json'
     }
 
-    hidden [PSCustomObject] GetDefaultHostSettingsFile() {
+    hidden [PSCustomObject] GetDefaultHostSettings() {
         return $this.ReadSettingsFile($this.GetDefaultHostSettingsFilePath())
     }
 
-    hidden [PSCustomObject] GetDefaultGameSettingsFile() {
+    hidden [PSCustomObject] GetDefaultGameSettings() {
         return $this.ReadSettingsFile($this.GetDefaultGameSettingsFilePath())
     }
 
     hidden [string] GetDefaultSettingsDirPath() {
-        return Join-Path -Path $this._properties.ReadProperty('InstallDir') -ChildPath 'VRisingServer_Data' |
+        return Join-Path -Path $this.GetServiceSetting('InstallDir') -ChildPath 'VRisingServer_Data' |
             Join-Path -ChildPath 'StreamingAssets' |
             Join-Path -ChildPath 'Settings'
     }
 
     hidden [string] GetSettingsDirPath() {
-        return Join-Path -Path $this._properties.ReadProperty('DataDir') -ChildPath ([VRisingServerSettings]::SETTINGS_DIR_NAME)
+        return Join-Path -Path $this.GetServiceSetting('DataDir') -ChildPath ([VRisingServerSettings]::SETTINGS_DIR_NAME)
     }
 
-    hidden [PSCustomObject] GetDefaultVoipSettingsFile() {
+    hidden [PSCustomObject] GetDefaultVoipSettings() {
         return [PSCustomObject]@{
             VOIPEnabled = $false
             VOIPIssuer = $null
@@ -453,6 +513,15 @@ class VRisingServerSettings {
             VOIPConversationalDistance = $null
             VOIPAudibleDistance = $null
             VOIPFadeIntensity = $null
+        }
+    }
+
+    hidden [PSCustomObject] GetDefaultServiceSettings() {
+        return [PSCustomObject]@{
+            DataDir = $null
+            InstallDir = $null
+            LogDir = $null
+            UpdateOnStartup = $true
         }
     }
 }

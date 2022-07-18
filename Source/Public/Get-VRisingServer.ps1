@@ -24,6 +24,9 @@ function Get-VRisingServer {
                 ([VRisingServerSettingsType]::Voip) {
                     $server._settings.GetVoipSetting($SettingName)
                 }
+                ([VRisingServerSettingsType]::Service) {
+                    $server._settings.GetServiceSetting($SettingName)
+                }
             }
         }
     } else {

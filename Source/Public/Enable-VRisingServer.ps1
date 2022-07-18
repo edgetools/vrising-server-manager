@@ -1,18 +1,18 @@
-function Enable-VRisingServer {
+function Enable-VRisingServerMonitor {
     [CmdletBinding(DefaultParameterSetName='ByShortName')]
     param (
         [Parameter(Position=0, ParameterSetName='ByShortName')]
         [string[]] $ShortName,
 
         [Parameter(ParameterSetName='ByServer', ValueFromPipeline=$true)]
-        [VRisingServer] $Server
+        [VRisingServer[]] $Server
     )
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ByShortName') {
             $servers = [VRisingServer]::FindServers($ShortName)
         } else {
-            $servers = @($Server)
+            $servers = $Server
         }
         foreach ($serverItem in $servers) {
             try {
@@ -25,4 +25,4 @@ function Enable-VRisingServer {
     }
 }
 
-Register-ArgumentCompleter -CommandName Enable-VRisingServer -ParameterName ShortName -ScriptBlock $function:ServerShortNameArgumentCompleter
+Register-ArgumentCompleter -CommandName Enable-VRisingServerMonitor -ParameterName ShortName -ScriptBlock $function:ServerShortNameArgumentCompleter

@@ -8,10 +8,19 @@ function ServerSettingsFileArgumentCompleter {
         [System.Collections.IDictionary] $FakeBoundParameters
     )
 
-    if ($FakeBoundParameters.ShortName.Count -gt 1) {
-        $shortName = $FakeBoundParameters.ShortName[0]
-    } else {
-        $shortName = $FakeBoundParameters.ShortName
+    function GetAutoCompletionServer() {
+        if ($true -eq $FakeBoundParameters.ContainsKey('Server')) {
+            # use -Server, if provided
+            return $FakeBoundParameters.Server
+        } elseif ($true -eq $FakeBoundParameters.ContainsKey('ShortName')) {
+            # use -ShortName to get server
+            if ($FakeBoundParameters.ShortName.Count -gt 1) {
+                $shortName = $FakeBoundParameters.ShortName[0]
+            } else {
+                $shortName = $FakeBoundParameters.ShortName
+            }
+            return [VRisingServer]::GetServer($shortName)
+        }
     }
 
     switch ($ParameterName) {
@@ -26,10 +35,7 @@ function ServerSettingsFileArgumentCompleter {
             #   <- Foo.Foo
             # Foo.F.Foo ->
             #   <- (null) -- don't fuzzy search on middle
-            if ($false -eq $FakeBoundParameters.ContainsKey('ShortName')) {
-                return
-            }
-            $server = Get-VRisingServer -ShortName $shortName
+            $server = GetAutoCompletionServer
             if ($null -eq $server) {
                 return
             }
@@ -70,21 +76,24 @@ function ServerSettingsFileArgumentCompleter {
                     if ($mapResult -like "$WordToComplete*") {
                         $sortedMapResults.Insert(0, $mapResult)
                     } else {
-                        $sortedMapResults.Add($mapResult)
+                        [void] $sortedMapResults.Add($mapResult)
                     }
                 }
                 $suggestedValues = $sortedMapResults.ToArray()
-            }
-            # value does not have known values, try to grab current value from server instead
-            if ($false -eq [string]::IsNullOrWhiteSpace($FakeBoundParameters.ShortName)) {
-                $server = [VRisingServer]::GetServer($FakeBoundParameters.ShortName)
-                $suggestedValues = $server._settings.GetSettingsTypeValue(
-                    $FakeBoundParameters.SettingsType,
-                    $FakeBoundParameters.SettingName)
+            } else {
+                # value does not have known values, try to grab current value from server instead
+                $server = GetAutoCompletionServer
+                if ($null -ne $server) {
+                    $suggestedValues = $server._settings.GetSettingsTypeValue(
+                        $FakeBoundParameters.SettingsType,
+                        $FakeBoundParameters.SettingName)
+                }
             }
             foreach ($suggestedValue in $suggestedValues) {
                 if ($suggestedValue -is [System.String]) {
                     [System.Management.Automation.CompletionResult]::New("`"$suggestedValue`"")
+                } elseif ($suggestedValue -is [System.Boolean]) {
+                    [System.Management.Automation.CompletionResult]::New("`$$suggestedValue")
                 } else {
                     [System.Management.Automation.CompletionResult]::New($suggestedValue)
                 }
