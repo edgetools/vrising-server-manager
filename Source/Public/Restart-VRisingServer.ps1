@@ -8,6 +8,9 @@ function Restart-VRisingServer {
         [VRisingServer[]] $Server,
 
         [Parameter()]
+        [switch] $Queue,
+
+        [Parameter()]
         [switch] $Force
     )
 
@@ -20,7 +23,7 @@ function Restart-VRisingServer {
         foreach ($serverItem in $servers) {
             try {
                 if ($PSCmdlet.ShouldProcess($serverItem.ShortName)) {
-                    $serverItem.Restart($Force)
+                    $serverItem.Restart($Queue, $Force)
                 }
             } catch [VRisingServerException] {
                 Write-Error $_.Exception

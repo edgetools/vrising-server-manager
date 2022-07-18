@@ -5,7 +5,10 @@ function Start-VRisingServer {
         [string[]] $ShortName,
 
         [Parameter(ParameterSetName='ByServer', ValueFromPipeline=$true)]
-        [VRisingServer[]] $Server
+        [VRisingServer[]] $Server,
+
+        [Parameter()]
+        [switch] $Queue
     )
 
     process {
@@ -17,7 +20,7 @@ function Start-VRisingServer {
         foreach ($serverItem in $servers) {
             try {
                 if ($PSCmdlet.ShouldProcess($serverItem.ShortName)) {
-                    $serverItem.Start()
+                    $serverItem.Start($Queue)
                 }
             } catch [VRisingServerException] {
                 Write-Error $_.Exception

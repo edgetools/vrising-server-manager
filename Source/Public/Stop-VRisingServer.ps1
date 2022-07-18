@@ -8,6 +8,9 @@ function Stop-VRisingServer {
         [VRisingServer[]] $Server,
 
         [Parameter()]
+        [switch] $Queue,
+
+        [Parameter()]
         [switch] $Force
     )
 
@@ -20,7 +23,7 @@ function Stop-VRisingServer {
         foreach ($serverItem in $servers) {
             try {
                 if ($PSCmdlet.ShouldProcess($serverItem.ShortName)) {
-                    $serverItem.Stop($Force)
+                    $serverItem.Stop($Queue, $Force)
                 }
             } catch [VRisingServerException] {
                 Write-Error $_.Exception

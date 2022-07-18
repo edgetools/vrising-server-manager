@@ -5,7 +5,10 @@ function Update-VRisingServer {
         [string[]] $ShortName,
 
         [Parameter(Position=0, ParameterSetName='ByServer', ValueFromPipeline=$true)]
-        [VRisingServer[]] $Server
+        [VRisingServer[]] $Server,
+
+        [Parameter()]
+        [switch] $Queue
     )
 
     process {
@@ -17,7 +20,7 @@ function Update-VRisingServer {
         foreach ($serverItem in $servers) {
             try {
                 if ($PSCmdlet.ShouldProcess($serverItem.ShortName)) {
-                    $serverItem.Update()
+                    $serverItem.Update($Queue)
                 }
             } catch [VRisingServerException] {
                 Write-Error $_.Exception

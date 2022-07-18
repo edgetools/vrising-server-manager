@@ -52,7 +52,7 @@ class VRisingServer {
             -TypeName "VRisingServer" `
             -MemberName Command `
             -MemberType ScriptProperty `
-            -Value { return $this._processMonitor.GetActiveCommand().Name } `
+            -Value { return $this._processMonitor.GetNextCommand().Name } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
@@ -348,20 +348,20 @@ class VRisingServer {
     }
 
     # instance methods
-    [void] Start() {
-        $this._processMonitor.Start()
+    [void] Start([bool]$queue) {
+        $this._processMonitor.Start($queue)
     }
 
-    [void] Stop([bool]$force) {
-        $this._processMonitor.Stop($force)
+    [void] Stop([bool]$queue, [bool]$force) {
+        $this._processMonitor.Stop($queue, $force)
     }
 
-    [void] Update() {
-        $this._processMonitor.Update()
+    [void] Update([bool]$queue) {
+        $this._processMonitor.Update($queue)
     }
 
-    [void] Restart([bool]$force) {
-        $this._processMonitor.Restart($force)
+    [void] Restart([bool]$queue, [bool]$force) {
+        $this._processMonitor.Restart($queue, $force)
     }
 
     [void] Enable() {

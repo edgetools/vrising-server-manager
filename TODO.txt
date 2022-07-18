@@ -1,5 +1,87 @@
 TODO: rethink or remove enable/disable
 - haven't found a use case for leaving the monitor running
+- maybe keep it running for auto-restart
+- maybe use task scheduler or maybe create my own scheduler
+  - use a timer?
+  - timer would require the monitor to always be running
+  - if the monitor dies it fucks them, then you have to worry about restarting the monitor somehow
+  - who monitors the monitors
+  - JUST USE TASK SCHEDULERS:
+    - TODO: can a scheduled task have multiple different times?
+      - would be cool to be able to schedule a server to run for certain times of day, like "6-12pm weekdays" or something,  or two blocks a day
+      - maybe just support N number of scheduled X tasks, like:
+        - Register-VRisingServerScheduledTask foo Start 8am
+        - Register-VRisingServerScheduledTask foo Stop 2pm
+        - Register-VRisingServerScheduledTask foo Start 5pm
+        - Register-VRisingServerScheduledTask foo Stop 10pm
+        or
+        - Register-VRisingServerScheduledTask foo Restart 5am
+        and
+        - Get-VRisingServerScheduledTask foo
+
+        Server    Task     Schedule   NextRun          Enabled
+        --------- -------- ---------- ---------------- -------
+        Foo       Restart  5am Daily  2022-07-18 05:00 True
+
+        - use scheduled task for AutoRestart
+
+        Server    TaskName    TaskCommand    Schedule         NextRun          Enabled
+        --------- --------    -------------- ---------------- ---------------- -------
+        Foo       AutoRestart Start          Every 1 minute   2022-07-18 16:20 True
+
+      - pass arguments into New-ScheduledTaskTrigger:
+
+      vrtask foo Start -AtLogon
+
+      vrtask [ShortName|Server] [Get|Create|Delete|Enable|Disable] [OPTIONS]
+
+      vrtask [ShortName|Server] [Get] [Start|Stop|Restart]
+
+      - vrtask foo
+
+      - vrtask foo get
+
+      - vrtask foo get start
+
+      vrtask [ShortName|Server] Create [Start|Stop|Restart] [Trigger]
+
+      - vrtask foo create start -AtLogon
+
+      vrtask [ShortName|Server] Delete 
+
+        - Tasks have a Name and a Path which could identify them:
+
+        VRisingServerManager\Servers\Foo\{GUID} ?
+
+        Then map the {GUID} to a task inside the config object.
+
+        Will need a named mutex to protect the tasks object
+
+        The task command is stored in the config object
+
+        The scheduled task just runs Invoke-VRisingServerTask TASK_GUID
+        - looks up the task in config
+        - grabs the command
+        - Sends the active command to it (SendCommand)
+          - TODO: QUEUES the next command (QueueCommand)
+
+      - automatically register tasks on startup if they aren't registered
+        - check the list of scheduled tasks
+        - check windows at the paths
+        - create if missing
+          - allows users to manually edit text file or
+          - allows moving the config file to another machine
+
+      - bring back the command queue:
+        - tasks drop the command into the queue
+        - normal commands don't use the queue unless you use -Queue
+          - nah, get rid of setting the active command directly
+            - unless you use -Queue, the command will error if it's busy
+          - go back to using the queue entirely
+          - solves issues with the mutex - the loop's job is to always pop off the stack
+
+TODO: create a Drain command to disable all monitors and wait for them to shut down
+- create an Upgrade command that runs drain and then runs update
 
 TODO: add suggestions for manager options
 
@@ -20,3 +102,8 @@ TODO: install steamcmd / rcu for the user
 
 TODO: allow timed shutdown with a cancellation
 - check a value from the file every loop iteration to allow backing out early
+
+TODO (CI): generate a changelog on PR
+- produce a failure if any non-conventional commits are detected
+  - commit count diff vs conventional commit count diff
+- require passing check before PR merge

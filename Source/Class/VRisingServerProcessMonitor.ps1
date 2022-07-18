@@ -27,9 +27,10 @@ class VRisingServerProcessMonitor {
                     [VRisingServerLog]::Info("[$shortName] Monitor disabled")
                     continue
                 }
-                # check for a command to run
-                $activeCommand = $this.GetActiveCommand()
+                # check for an active command to run
+                $activeCommand = $this.PopCommandQueueItem()
                 if ($null -ne $activeCommand) {
+                    $this.SetActiveCommand($activeCommand)
                     [VRisingServerLog]::Info("[$shortName] Processing command: $($activeCommand.Name)")
                     switch ($activeCommand.Name) {
                         'Start' {
@@ -62,6 +63,11 @@ class VRisingServerProcessMonitor {
                     $this.SetActiveCommand($null)
                     [VRisingServerLog]::Info("[$shortName] Command processed: $($activeCommand.Name)")
                 }
+                if ($this.GetQueueDepth() -eq 0) {
+                    $keepRunning = $false
+                    [VRisingServerLog]::Info("[$shortName] Command queue empty")
+                    continue
+                }
                 Start-Sleep -Seconds $this.GetPollingRate()
             }
         } finally {
@@ -70,37 +76,41 @@ class VRisingServerProcessMonitor {
         }
     }
 
-    [void] Start() {
+    [void] Start([bool]$queue) {
         $this.SendCommand(
             [pscustomobject]@{
                 Name = 'Start'
-            }
+            },
+            $queue
         )
     }
 
-    [void] Stop([bool]$force) {
+    [void] Stop([bool]$queue, [bool]$force) {
         $this.SendCommand(
             [pscustomobject]@{
                 Name = 'Stop'
                 Force = $force
-            }
+            },
+            $queue
         )
     }
 
-    [void] Update() {
+    [void] Update([bool]$queue) {
         $this.SendCommand(
             [pscustomobject]@{
                 Name = 'Update'
-            }
+            },
+            $queue
         )
     }
 
-    [void] Restart([bool]$force) {
+    [void] Restart([bool]$queue, [bool]$force) {
         $this.SendCommand(
             [pscustomobject]@{
                 Name = 'Restart'
                 Force = $force
-            }
+            },
+            $queue
         )
     }
 
@@ -142,8 +152,27 @@ class VRisingServerProcessMonitor {
         [void] $this.KillProcess('Update', $this.GetUpdateProcess(), $force)
     }
 
+    [psobject] GetNextCommand() {
+        if ($null -ne $this.GetActiveCommand()) {
+            return $this.GetActiveCommand()
+        } elseif ($this.GetQueueDepth() -gt 0) {
+            return $this.GetCommandQueue()[0]
+        } else {
+            return $null
+        }
+    }
+
+    [int] GetQueueDepth() {
+        return $this._properties.ReadProperty('ProcessMonitorCommandQueue').Count
+    }
+
     [bool] IsBusy() {
-        return ($null -ne $this.GetActiveCommand())
+        if (($null -ne $this.GetActiveCommand()) -or
+                ($this.GetQueueDepth() -gt 0)) {
+            return $true
+        } else {
+            return $false
+        }
     }
 
     [string] GetUptime() {
@@ -235,17 +264,17 @@ class VRisingServerProcessMonitor {
         }
     }
 
-    hidden [void] SendCommand([pscustomobject]$command) {
-        if ($true -eq $this.IsBusy()) {
-            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] Cannot send '$($command.Name)' command -- Monitor is busy")
+    hidden [void] SendCommand([psobject]$command, [bool]$queue) {
+        if (($true -eq $this.IsBusy()) -and ($false -eq $queue)) {
+            throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] Cannot send '$($command.Name)' command -- Monitor is busy. Use -Queue to queue the command instead.")
         }
         $this.GetCommandMutex().WaitOne()
         try {
             # check again
-            if ($true -eq $this.IsBusy()) {
-                throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] Cannot send '$($command.Name)' command -- Monitor is busy")
+            if (($true -eq $this.IsBusy()) -and ($false -eq $queue)) {
+                throw [VRisingServerException]::New("[$($this._properties.ReadProperty('ShortName'))] Cannot send '$($command.Name)' command -- Monitor is busy. Use -Queue to queue the command instead.")
             }
-            $this.SetActiveCommand($command)
+            $this.AddCommandQueueItem($command)
             $this.LaunchMonitor()
             [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] $($command.Name) command sent")
         }
@@ -269,7 +298,47 @@ class VRisingServerProcessMonitor {
         }
     }
 
-    hidden [void] SetActiveCommand([pscustomobject]$command) {
+    hidden [psobject] PopCommandQueueItem() {
+        $this.GetCommandMutex().WaitOne()
+        try {
+            $currentQueue = $this._properties.ReadProperty('ProcessMonitorCommandQueue')
+            if ($currentQueue.Count -gt 0) {
+                $queueItem = $currentQueue[0]
+                $remainingQueue = $currentQueue[1..($currentQueue.Length)]
+                $this._properties.WriteProperty('ProcessMonitorCommandQueue', $remainingQueue)
+                return $queueItem
+            } else {
+                return $null
+            }
+        } finally {
+            $this.GetCommandMutex().ReleaseMutex()
+        }
+    }
+
+    hidden [void] AddCommandQueueItem([psobject]$queueItem) {
+        $this.GetCommandMutex().WaitOne()
+        try {
+            $currentQueue = $this.GetCommandQueue()
+            if ($currentQueue.Count -eq 0) {
+                $updatedQueue = @($queueItem)
+            } else {
+                $updatedQueue = $currentQueue + $queueItem
+            }
+            $this.SetCommandQueue($updatedQueue)
+        } finally {
+            $this.GetCommandMutex().ReleaseMutex()
+        }
+    }
+
+    hidden [psobject] GetCommandQueue() {
+        return $this._properties.ReadProperty('ProcessMonitorCommandQueue')
+    }
+
+    hidden [void] SetCommandQueue([psobject]$queue) {
+        $this._properties.WriteProperty('ProcessMonitorCommandQueue', $queue)
+    }
+
+    hidden [void] SetActiveCommand([psobject]$command) {
         $this._properties.WriteProperty('ProcessMonitorActiveCommand', $command)
     }
 
