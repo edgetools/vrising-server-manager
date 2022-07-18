@@ -877,6 +877,9 @@ function SanitizeMarkdown([string]$markdown) {
     # remove single underline italics
     $sanitizedMarkdown = $sanitizedMarkdown -replace '_(.+)_+','$1'
 
+    # remove single backtick code formatting
+    $sanitizedMarkdown = $sanitizedMarkdown -replace '`(.*)`','$1'
+
     # output
     $sanitizedMarkdown
 }
