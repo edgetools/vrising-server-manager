@@ -21,6 +21,14 @@ class VRisingServerLog {
         $toLog | ForEach-Object { Write-Error $([VRisingServerLog]::WithPrefix($_)) }
     }
 
+    static [string[]] FormatError([System.Management.Automation.ErrorRecord]$errorRecord) {
+        $output = [System.Collections.ArrayList]::New()
+        $output.AddRange($errorRecord.Exception.ToString() -split ([System.Environment]::NewLine))
+        $output.AddRange($errorRecord.InvocationInfo.PositionMessage -split ([System.Environment]::NewLine))
+        $output.AddRange($errorRecord.ScriptStackTrace -split ([System.Environment]::NewLine))
+        return $output.ToArray([string])
+    }
+
     static hidden [string] WithPrefix([PSCustomObject]$toLog) {
         $prefixString = ''
         if ($true -eq [VRisingServerLog]::ShowDateTime) {

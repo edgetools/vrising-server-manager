@@ -32,33 +32,15 @@ class VRisingServerProcessMonitor {
                 if ($null -ne $activeCommand) {
                     $this.SetActiveCommand($activeCommand)
                     [VRisingServerLog]::Info("[$shortName] Processing command: $($activeCommand.Name)")
-                    switch ($activeCommand.Name) {
-                        'Start' {
-                            $updateOnStartup = $this._settings.GetServiceSetting('UpdateOnStartup')
-                            if ($true -eq $updateOnStartup) {
-                                $this.UpdateServer()
-                            }
-                            $this.LaunchServer()
-                            break
-                        }
-                        'Stop' {
-                            $this.KillServer($activeCommand.Force)
-                            break
-                        }
-                        'Update' {
-                            $this.UpdateServer()
-                            break
-                        }
-                        'Restart' {
-                            if ($true -eq $this.ServerIsRunning()) {
-                                $this.KillServer($activeCommand.Force)
-                            }
-                            $updateOnStartup = $this._settings.GetServiceSetting('UpdateOnStartup')
-                            if ($true -eq $updateOnStartup) {
-                                $this.UpdateServer()
-                            }
-                            $this.LaunchServer()
-                        }
+                    try {
+                        $this.ProcessActiveCommand($activeCommand)
+                    } catch [VRisingServerException] {
+                        # don't want the monitor to crash because a command failed
+                        [VRisingServerLog]::Info("[$shortName] Command error: $($_.Exception.Message)")
+                    } catch {
+                        # unrecognized exceptions will print more info for debugging
+                        [VRisingServerLog]::Info("[$shortName] Unrecognized command error:")
+                        [VRisingServerLog]::Info([VRisingServerLog]::FormatError($_))
                     }
                     $this.SetActiveCommand($null)
                     [VRisingServerLog]::Info("[$shortName] Command processed: $($activeCommand.Name)")
@@ -236,6 +218,37 @@ class VRisingServerProcessMonitor {
             return 'OK'
         } else {
             return 'Unknown'
+        }
+    }
+
+    hidden [void] ProcessActiveCommand([psobject]$activeCommand) {
+        switch ($activeCommand.Name) {
+            'Start' {
+                $updateOnStartup = $this._settings.GetServiceSetting('UpdateOnStartup')
+                if ($true -eq $updateOnStartup) {
+                    $this.UpdateServer()
+                }
+                $this.LaunchServer()
+                break
+            }
+            'Stop' {
+                $this.KillServer($activeCommand.Force)
+                break
+            }
+            'Update' {
+                $this.UpdateServer()
+                break
+            }
+            'Restart' {
+                if ($true -eq $this.ServerIsRunning()) {
+                    $this.KillServer($activeCommand.Force)
+                }
+                $updateOnStartup = $this._settings.GetServiceSetting('UpdateOnStartup')
+                if ($true -eq $updateOnStartup) {
+                    $this.UpdateServer()
+                }
+                $this.LaunchServer()
+            }
         }
     }
 
