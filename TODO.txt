@@ -1,3 +1,5 @@
+TODO: add date to lastupdate
+
 TODO: rethink or remove enable/disable
 - haven't found a use case for leaving the monitor running
 - maybe keep it running for auto-restart
@@ -72,20 +74,10 @@ TODO: rethink or remove enable/disable
           - allows users to manually edit text file or
           - allows moving the config file to another machine
 
-      - bring back the command queue:
-        - tasks drop the command into the queue
-        - normal commands don't use the queue unless you use -Queue
-          - nah, get rid of setting the active command directly
-            - unless you use -Queue, the command will error if it's busy
-          - go back to using the queue entirely
-          - solves issues with the mutex - the loop's job is to always pop off the stack
-
 TODO: create a Drain command to disable all monitors and wait for them to shut down
 - create an Upgrade command that runs drain and then runs update
 
 TODO: add suggestions for manager options
-
-TODO: add date to lastupdate
 
 TODO: add scheduled task to automatically start servers on windows startup
 - since the process launches in the background, a scheduled task won't negatively affect its performance

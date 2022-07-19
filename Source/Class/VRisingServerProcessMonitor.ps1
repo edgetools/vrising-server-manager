@@ -226,7 +226,7 @@ class VRisingServerProcessMonitor {
             'Start' {
                 $updateOnStartup = $this._settings.GetServiceSetting('UpdateOnStartup')
                 if ($true -eq $updateOnStartup) {
-                    $this.UpdateServer()
+                    $this.TryUpdate()
                 }
                 $this.LaunchServer()
                 break
@@ -245,10 +245,18 @@ class VRisingServerProcessMonitor {
                 }
                 $updateOnStartup = $this._settings.GetServiceSetting('UpdateOnStartup')
                 if ($true -eq $updateOnStartup) {
-                    $this.UpdateServer()
+                    $this.TryUpdate()
                 }
                 $this.LaunchServer()
             }
+        }
+    }
+
+    hidden [void] TryUpdate() {
+        try {
+            $this.UpdateServer()
+        } catch [VRisingServerException] {
+            [VRisingServerLog]::Info("[$($this._properties.ReadProperty('ShortName'))] Update failed: $($_.Exception.Message)")
         }
     }
 
