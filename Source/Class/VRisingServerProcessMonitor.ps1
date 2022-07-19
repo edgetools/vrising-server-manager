@@ -165,18 +165,19 @@ class VRisingServerProcessMonitor {
             return $null
         } else {
             $uptime = (Get-Date) - $process.StartTime
-            $uptimeString = $null
-            if ($uptime.Days -gt 0) {
-                $uptimeString += "$(($uptime.TotalDays -split '\.')[0])d"
-            } elseif ($uptime.Hours -gt 0) {
-                $uptimeString += "$(($uptime.TotalHours -split '\.')[0])h"
-            } elseif ($uptime.Minutes -gt 0) {
-                $uptimeString += "$(($uptime.TotalMinutes -split '\.')[0])m"
-            } else {
-                $uptimeString += "$(($uptime.TotalSeconds -split '\.')[0])s"
-            }
-            return $uptimeString
+            return $this.FormatTimespan($uptime)
         }
+    }
+
+    [string] GetTimeSinceLastUpdate() {
+        $successDateString = $this._properties.ReadProperty('UpdateSuccessDate')
+        if ($true -eq [string]::IsNullOrWhiteSpace($successDateString)) {
+            return 'Unknown'
+        }
+        $successDate = [datetime]::ParseExact($successDateString, 'yyyy-MM-ddTHH:mm:ss', $null)
+        $now = Get-Date
+        $elapsedTime = $now - $successDate
+        return $this.FormatTimespan($elapsedTime)
     }
 
     [string] GetStatus() {
@@ -219,6 +220,20 @@ class VRisingServerProcessMonitor {
         } else {
             return 'Unknown'
         }
+    }
+
+    hidden [string] FormatTimespan([TimeSpan]$timeSpan) {
+        $timeSpanString = $null
+        if ($timeSpan.Days -gt 0) {
+            $timeSpanString += "$(($timeSpan.TotalDays -split '\.')[0])d"
+        } elseif ($timeSpan.Hours -gt 0) {
+            $timeSpanString += "$(($timeSpan.TotalHours -split '\.')[0])h"
+        } elseif ($timeSpan.Minutes -gt 0) {
+            $timeSpanString += "$(($timeSpan.TotalMinutes -split '\.')[0])m"
+        } else {
+            $timeSpanString += "$(($timeSpan.TotalSeconds -split '\.')[0])s"
+        }
+        return $timeSpanString
     }
 
     hidden [void] ProcessActiveCommand([psobject]$activeCommand) {
@@ -555,7 +570,7 @@ class VRisingServerProcessMonitor {
             $stdoutLogFile = Join-Path -Path $logDir -ChildPath "VRisingServer.ProcessMonitor.Info.log"
             $stderrLogFile = Join-Path -Path $logDir -ChildPath "VRisingServer.ProcessMonitor.Error.log"
             $argumentList = @"
--Command "& {
+-NonInteractive -Command "& {
     `$ErrorActionPreference = 'Stop';
     if (`$null -eq `$script:VRisingServerManagerFlags) {
         `$script:VRisingServerManagerFlags = @{};

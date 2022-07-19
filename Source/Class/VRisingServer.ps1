@@ -56,9 +56,15 @@ class VRisingServer {
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
-            -MemberName LastUpdate `
+            -MemberName UpdateStatus `
             -MemberType ScriptProperty `
             -Value { return $this._processMonitor.GetUpdateStatus() } `
+            -Force
+        Update-TypeData `
+            -TypeName "VRisingServer" `
+            -MemberName LastUpdate `
+            -MemberType ScriptProperty `
+            -Value { return $this._processMonitor.GetTimeSinceLastUpdate() } `
             -Force
         Update-TypeData `
             -TypeName "VRisingServer" `
