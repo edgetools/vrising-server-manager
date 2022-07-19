@@ -763,7 +763,7 @@ function ReadFile($path) {
 }
 
 function WriteFile($path, $content) {
-    Out-File -FilePath $path -InputObject $content
+    Out-File -FilePath $path -InputObject $content -Encoding utf8
 }
 
 function UpdateChangelog($oldChangelog, $newHeader, $newChangelog) {
